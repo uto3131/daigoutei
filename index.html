@@ -3,37 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図共有アプリ（色・ラベル機能付き）</title>
+    <title>見取り図共有アプリ（スマホ完全対応版）</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            margin: 0; padding: 20px; background-color: #f5f5f7; color: #1d1d1f;
+            margin: 0; padding: 15px; background-color: #f5f5f7; color: #1d1d1f;
         }
         .container { max-width: 1100px; margin: 0 auto; }
-        h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.5px; }
-        p.subtitle { color: #86868b; margin-top: 0; margin-bottom: 24px; font-size: 14px; }
+        h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.5px; }
+        p.subtitle { color: #86868b; margin-top: 0; margin-bottom: 20px; font-size: 13px; }
         
-        /* 2カラムレイアウト（メインエリアと右側設定パネル） */
-        .app-layout { display: flex; gap: 24px; align-items: flex-start; }
-        .main-area { flex: 1; min-width: 0; }
-        
-        /* 右側：色の名前設定パネル */
-        .config-panel {
-            width: 280px; background: #ffffff; padding: 20px; border-radius: 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);
+        /* 📱 スマホ時は縦並び、PC時は横並びにする魔法のレイアウト */
+        .app-layout { display: flex; flex-direction: column; gap: 20px; }
+        @media (min-width: 768px) {
+            .app-layout { flex-direction: row; align-items: flex-start; }
+            h1 { font-size: 26px; }
+            p.subtitle { font-size: 14px; }
         }
+        
+        .main-area { flex: 1; min-width: 0; width: 100%; }
+        
+        /* 右側設定パネル（スマホ時は横幅いっぱいに広がる） */
+        .config-panel {
+            width: 100%; background: #ffffff; padding: 20px; border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);
+            box-sizing: border-box;
+        }
+        @media (min-width: 768px) {
+            .config-panel { width: 280px; }
+        }
+        
         .config-panel h3 { margin-top: 0; font-size: 16px; font-weight: 600; margin-bottom: 12px; }
         .label-group { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-        .color-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #fff; box-shadow: 0 0 0 1.5px #d2d2d7; shrink: 0; }
-        .label-input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid #d2d2d7; font-size: 13px; }
+        
+        /* 色つきの丸ドット */
+        .color-dot { 
+            width: 16px; height: 16px; border-radius: 50%; 
+            border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; display: inline-block;
+        }
+        .label-input { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #d2d2d7; font-size: 14px; }
         
         #controls {
-            background: #ffffff; padding: 16px 20px; border-radius: 14px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px;
-            display: flex; align-items: center; gap: 16px;
+            background: #ffffff; padding: 12px 16px; border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px;
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
         }
         .file-label {
-            background: #0071e3; color: white; padding: 12px 20px; border-radius: 8px; cursor: pointer;
+            background: #0071e3; color: white; padding: 10px 16px; border-radius: 8px; cursor: pointer;
             font-weight: 500; font-size: 14px; transition: all 0.2s; display: inline-block;
         }
         .file-label:hover { background: #0077ed; }
@@ -42,66 +58,71 @@
         #map-container {
             position: relative; display: inline-block; background-color: #ffffff;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); overflow: hidden;
-            max-width: 100%; border: 1px solid rgba(0,0,0,0.05); min-width: 320px; min-height: 200px;
+            max-width: 100%; border: 1px solid rgba(0,0,0,0.05); min-width: 100%; min-height: 200px;
         }
-        #blueprint { display: block; max-width: 100%; height: auto; }
+        @media (min-width: 768px) {
+            #map-container { min-width: 320px; }
+        }
+        #blueprint { display: block; max-width: 100%; height: auto; width: 100%; }
+        
         #no-image-placeholder {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; color: #86868b; font-size: 15px; width: 90%; pointer-events: none;
+            text-align: center; color: #86868b; font-size: 14px; width: 90%; pointer-events: none;
         }
         
-        /* 動的な色のピン */
         .pin {
-            position: absolute; width: 20px; height: 20px;
+            position: absolute; width: 22px; height: 22px;
             border: 2.5px solid #ffffff; border-radius: 50%; transform: translate(-50%, -50%);
             cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.25);
             transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10;
         }
-        .pin:hover { transform: translate(-50%, -50%) scale(1.25); }
         
-        /* ポップアップ */
+        /* 📱 スマホでもしっかり見えるようにポップアップを最適化 */
         .modal {
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            padding: 24px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-            z-index: 100; width: 320px; max-height: 80vh; overflow-y: auto; border: 1px solid rgba(255,255,255,0.4);
+            background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            padding: 20px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            z-index: 100; width: 85%; max-width: 340px; max-height: 85vh; overflow-y: auto; 
+            border: 1px solid rgba(255,255,255,0.4); box-sizing: border-box;
         }
-        .modal h3 { margin-top: 0; font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+        .modal h3 { margin-top: 0; font-size: 18px; font-weight: 600; margin-bottom: 14px; }
         .modal textarea {
             width: 100%; height: 90px; padding: 10px; border-radius: 8px; border: 1px solid #d2d2d7;
             font-size: 14px; box-sizing: border-box; background: #f5f5f7; resize: none; outline: none;
         }
-        /* ラジオボタン付きの色選択スタイル */
-        .color-selector { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-        .color-option { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
         
+        /* スマホでバグらない選択肢デザイン */
+        .color-selector { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+        .color-option { display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer; padding: 4px 0; }
+        .color-option input[type="radio"] { width: 18px; height: 18px; margin: 0; }
+
         #overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 99;
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 99;
         }
         .btn {
             background: #0071e3; color: white; border: none; padding: 10px 18px;
             border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer;
         }
-        .btn-cancel { background: #86868b; color: white; margin-left: 8px; }
-        .btn-danger { background: #ff3b30; color: white; margin-right: auto; }
+        .btn-cancel { background: #86868b; color: white; margin-left: auto; }
+        .btn-danger { background: #ff3b30; color: white; }
         
-        .modal-buttons { display: flex; justify-content: flex-end; margin-top: 16px; gap: 8px; }
+        .modal-buttons { display: flex; justify-content: flex-end; margin-top: 16px; gap: 8px; width: 100%; }
         #view-photo { max-width: 100%; height: auto; border-radius: 10px; margin-top: 14px; display: none; }
         .input-group { margin-bottom: 16px; }
         .input-group label { display: block; font-size: 13px; font-weight: 600; color: #6e6e73; margin-bottom: 6px; }
         .date-info { font-size: 11px; color: #86868b; margin-top: 12px; line-height: 1.4; border-top: 1px solid #e8e8ed; padding-top: 8px; }
-        .category-tag { inline-block; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 4px; color: white; margin-bottom: 8px; display: inline-block;}
+        .category-tag { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; color: white; margin-bottom: 8px; display: inline-block;}
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>🗺 見取り図ピン留めアプリ</h1>
-    <p class="subtitle">ピンの色ごとに名前（ラベル）を自由に変更でき、全員にリアルタイム共有されます。</p>
+    <p class="subtitle">ピンの追加・色の名前変更がリアルタイムに全員の画面へ同期されます。</p>
     
     <div id="controls">
-        <label for="file-input" class="file-label">📸 見取り図を選択してアップロード</label>
+        <label for="file-input" class="file-label">📸 見取り図をアップロード</label>
         <input type="file" id="file-input" accept="image/*">
         <span id="upload-status" style="font-size:13px; color:#0071e3; font-weight: 600;"></span>
     </div>
@@ -132,7 +153,7 @@
                 <div class="color-dot" style="background:#34c759;"></div>
                 <input type="text" id="label-green" class="label-input" value="その他">
             </div>
-            <button class="btn" id="save-labels-btn" style="width:100%; font-size:12px; padding:6px;">色の名前を全員に同期</button>
+            <button class="btn" id="save-labels-btn" style="width:100%; font-size:13px; padding:10px;">色の名前を全員に同期</button>
         </div>
     </div>
 </div>
@@ -145,10 +166,10 @@
     <div class="input-group" id="color-select-group">
         <label>ピンの色（カテゴリー）</label>
         <div class="color-selector">
-            <label class="color-option"><input type="radio" name="pin-color" value="#ff3b30" checked><span class="color-dot" style="background:#ff3b30;"></span><span id="opt-red">要補修</span></label>
-            <label class="color-option"><input type="radio" name="pin-color" value="#007aff"><span class="color-dot" style="background:#007aff;"></span><span id="opt-blue">確認済み</span></label>
-            <label class="color-option"><input type="radio" name="pin-color" value="#ffcc00"><span class="color-dot" style="background:#ffcc00;"></span><span id="opt-yellow">保留</span></label>
-            <label class="color-option"><input type="radio" name="pin-color" value="#34c759"><span class="color-dot" style="background:#34c759;"></span><span id="opt-green">その他</span></label>
+            <label class="color-option"><input type="radio" name="pin-color" value="#ff3b30" checked><div class="color-dot" style="background:#ff3b30;"></div><span id="opt-red">要補修</span></label>
+            <label class="color-option"><input type="radio" name="pin-color" value="#007aff"><div class="color-dot" style="background:#007aff;"></div><span id="opt-blue">確認済み</span></label>
+            <label class="color-option"><input type="radio" name="pin-color" value="#ffcc00"><div class="color-dot" style="background:#ffcc00;"></div><span id="opt-yellow">保留</span></label>
+            <label class="color-option"><input type="radio" name="pin-color" value="#34c759"><div class="color-dot" style="background:#34c759;"></div><span id="opt-green">その他</span></label>
         </div>
     </div>
 
@@ -199,12 +220,11 @@
         db = getFirestore(app);
         pinsCollection = collection(db, "pins");
         imageDocRef = doc(db, "settings", "blueprintImage");
-        labelsDocRef = doc(db, "settings", "colorLabels"); // 色ラベル保存用
+        labelsDocRef = doc(db, "settings", "colorLabels");
     } catch (e) {
         alert("Firebaseの初期化に失敗しました。");
     }
 
-    // 各要素の取得
     const fileInput = document.getElementById('file-input');
     const blueprint = document.getElementById('blueprint');
     const container = document.getElementById('map-container');
@@ -229,7 +249,6 @@
     const deleteBtn = document.getElementById('delete-btn');
     const editBtn = document.getElementById('edit-btn');
 
-    // ラベル設定用要素
     const labelRed = document.getElementById('label-red');
     const labelBlue = document.getElementById('label-blue');
     const labelYellow = document.getElementById('label-yellow');
@@ -246,7 +265,6 @@
     let selectedPinId = null;
     let isEditing = false;
     
-    // 色コードとラベルの対応辞書（初期値）
     let colorMap = {
         "#ff3b30": "要補修",
         "#007aff": "確認済み",
@@ -270,152 +288,3 @@
                     let width = img.width; let height = img.height;
                     if (width > height) { if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; } } 
                     else { if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; } }
-                    canvas.width = width; canvas.height = height;
-                    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', quality));
-                };
-            };
-        });
-    }
-
-    // ★【新機能】クラウドから色ラベルの名前をリアルタイム同期
-    onSnapshot(labelsDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            colorMap["#ff3b30"] = labelRed.value = optRed.textContent = data.red || "要補修";
-            colorMap["#007aff"] = labelBlue.value = optBlue.textContent = data.blue || "確認済み";
-            colorMap["#ffcc00"] = labelYellow.value = optYellow.textContent = data.yellow || "保留";
-            colorMap["#34c759"] = labelGreen.value = optGreen.textContent = data.green || "その他";
-        }
-    });
-
-    // ★【新機能】色の名前を保存する
-    saveLabelsBtn.addEventListener('click', async () => {
-        try {
-            await setDoc(labelsDocRef, {
-                red: labelRed.value,
-                blue: labelBlue.value,
-                yellow: labelYellow.value,
-                green: labelGreen.value
-            });
-            alert("色の名前を全員に同期しました！");
-        } catch (e) { alert("ラベルの保存に失敗しました: " + e.message); }
-    });
-
-    // 見取り図リアルタイム同期
-    onSnapshot(imageDocRef, (docSnap) => {
-        if (docSnap.exists() && docSnap.data().base64) {
-            blueprint.src = docSnap.data().base64;
-            blueprint.style.display = 'block';
-            placeholder.style.display = 'none';
-        }
-    });
-
-    fileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            uploadStatus.textContent = "⏳ 同期中...";
-            const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
-            await setDoc(imageDocRef, { base64: compressedBase64 });
-            uploadStatus.textContent = "✅ 同期完了";
-        }
-    });
-
-    pinPhotoInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) { currentPinPhotoData = await compressImage(file, 600, 600, 0.7); }
-    });
-
-    container.addEventListener('click', (e) => {
-        if (e.target === blueprint || e.target === container) {
-            const rect = container.getBoundingClientRect();
-            currentCoords.x = ((e.clientX - rect.left) / rect.width) * 100;
-            currentCoords.y = ((e.clientY - rect.top) / rect.height) * 100;
-
-            isEditing = false;
-            modalTitle.textContent = "📌 情報をクラウドに記録";
-            memoText.value = ''; pinPhotoInput.value = ''; currentPinPhotoData = "";
-            photoInputGroup.style.display = 'block';
-            colorSelectGroup.style.display = 'block'; // 新規作成時は色を選べる
-            memoBox.style.display = 'block'; overlay.style.display = 'block';
-        }
-    });
-
-    saveBtn.addEventListener('click', async () => {
-        const now = new Date().getTime();
-        const selectedColor = document.querySelector('input[name="pin-color"]:checked').value;
-        try {
-            if (isEditing) {
-                const pinDocRef = doc(db, "pins", selectedPinId);
-                await updateDoc(pinDocRef, { note: memoText.value, updatedAt: now });
-            } else {
-                await addDoc(pinsCollection, {
-                    x: currentCoords.x, y: currentCoords.y, note: memoText.value,
-                    photo: currentPinPhotoData, color: selectedColor, createdAt: now, updatedAt: now
-                });
-            }
-            closeModal();
-        } catch (error) { alert("保存エラー: " + error.message); }
-    });
-
-    // クラウドのピンをリアルタイム描画（色の反映付き）
-    onSnapshot(pinsCollection, (snapshot) => {
-        document.querySelectorAll('.pin').forEach(pin => pin.remove());
-        snapshot.forEach((docSnap) => {
-            const pinData = docSnap.data();
-            const pinId = docSnap.id;
-            
-            const pin = document.createElement('div');
-            pin.className = 'pin';
-            pin.style.left = pinData.x + '%';
-            pin.style.top = pinData.y + '%';
-            
-            // ★データに登録されている色にする（なければデフォルト赤）
-            const pinColor = pinData.color || "#ff3b30";
-            pin.style.backgroundColor = pinColor;
-
-            pin.addEventListener('click', (e) => {
-                e.stopPropagation();
-                selectedPinId = pinId;
-                viewText.textContent = pinData.note || "（メモはありません）";
-                if (pinData.photo) {
-                    viewPhoto.src = pinData.photo; viewPhoto.style.display = 'block';
-                } else { viewPhoto.style.display = 'none'; }
-                
-                // ポップアップのタグに現在のカテゴリー名を設定
-                viewTag.style.backgroundColor = pinColor;
-                viewTag.textContent = colorMap[pinColor] || "カテゴリー";
-
-                viewDates.innerHTML = `作成日: ${formatDate(pinData.createdAt)}<br>最終編集: ${formatDate(pinData.updatedAt)}`;
-                viewBox.style.display = 'block'; overlay.style.display = 'block';
-            });
-            container.appendChild(pin);
-        });
-    });
-
-    editBtn.addEventListener('click', () => {
-        isEditing = true;
-        modalTitle.textContent = "✏️ メモを編集";
-        memoText.value = viewText.textContent === "（メモはありません）" ? "" : viewText.textContent;
-        photoInputGroup.style.display = 'none';
-        colorSelectGroup.style.display = 'none'; // 編集時は色は変更しない（シンプル化のため）
-        viewBox.style.display = 'none'; memoBox.style.display = 'block';
-    });
-
-    deleteBtn.addEventListener('click', async () => {
-        if (confirm("このピンを削除してもよろしいですか？")) {
-            const pinDocRef = doc(db, "pins", selectedPinId);
-            await deleteDoc(pinDocRef); closeModal();
-        }
-    });
-
-    cancelBtn.addEventListener('click', closeModal);
-    closeViewBtn.addEventListener('click', closeModal);
-    overlay.addEventListener('click', closeModal);
-    
-    function closeModal() {
-        memoBox.style.display = 'none'; viewBox.style.display = 'none'; overlay.style.display = 'none';
-    }
-</script>
-</body>
-</html>
