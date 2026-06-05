@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図共有アプリ（完全無料・安全強化版）</title>
+    <title>見取り図共有アプリ（最終検証版）</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -41,16 +41,15 @@
         .label-input { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #d2d2d7; font-size: 14px; }
         
         #controls {
-            background: #ffffff; padding: 12px 16px; border-radius: 14px;
+            background: #ffffff; padding: 16px; border-radius: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px;
-            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+            display: flex; flex-direction: column; gap: 8px;
         }
-        .file-label {
-            background: #0071e3; color: white; padding: 10px 16px; border-radius: 8px; cursor: pointer;
-            font-weight: 500; font-size: 14px; transition: all 0.2s; display: inline-block;
+        
+        /* 🛠️ ボタンの構造を限界までシンプルに修正 */
+        .direct-file-input {
+            font-size: 16px; padding: 8px; width: 100%; max-width: 300px;
         }
-        .file-label:hover { background: #0077ed; }
-        #file-input { display: none; }
         
         #map-container {
             position: relative; display: inline-block; background-color: #ffffff;
@@ -117,9 +116,9 @@
     <p class="subtitle">ピンの追加・色の名前変更がリアルタイムに全員の画面へ同期されます。</p>
     
     <div id="controls">
-        <label for="file-input" class="file-label">📸 見取り図をアップロード</label>
-        <input type="file" id="file-input" accept="image/*">
-        <span id="upload-status" style="font-size:13px; color:#0071e3; font-weight: 600;"></span>
+        <strong style="font-size: 14px; color: #1d1d1f;">📸 見取り図をアップロード:</strong>
+        <input type="file" id="file-input" class="direct-file-input" accept="image/*">
+        <span id="upload-status" style="font-size:13px; color:#0071e3; font-weight: 600; margin-top: 4px;"></span>
     </div>
 
     <div class="app-layout">
@@ -198,7 +197,7 @@
     import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // ⚠️【コピペエリア】あなたのFirebaseの鍵を貼り付けてください。
-   const firebaseConfig = {
+    const firebaseConfig = {
   apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
   authDomain: "daigoutei-191b2.firebaseapp.com",
   projectId: "daigoutei-191b2",
@@ -215,7 +214,7 @@
         imageDocRef = doc(db, "settings", "blueprintImage");
         labelsDocRef = doc(db, "settings", "colorLabels");
     } catch (e) {
-        alert("Firebaseの初期化に失敗しました。鍵を確認してください。");
+        alert("Firebaseの初期化に致命的なエラーが発生しました:\n" + e.message);
     }
 
     const fileInput = document.getElementById('file-input');
@@ -266,9 +265,8 @@
         return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
-    // 完全に無料プラン枠に収めるため、画像を限界まで圧縮（容量を最軽量化）
     function compressImage(file, maxWidth, maxHeight, quality) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const reader = new FileReader(); reader.readAsDataURL(file);
             reader.onload = event => {
                 const img = new Image(); img.src = event.target.result;
@@ -281,27 +279,42 @@
                     const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
                     resolve(canvas.toDataURL('image/jpeg', quality));
                 };
+                img.onerror = e => reject(new Error("画像の読み込みに失敗しました。"));
             };
+            reader.onerror = e => reject(new Error("ファイルの読み取りに失敗しました。"));
         });
     }
 
-    // Storageを使わず、Firestore（無料枠）に直接画像を安全保存する仕組みに変更
-    fileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        uploadStatus.textContent = "⏳ 同期中...";
-        try {
-            // 無料データベース用にサイズを最適に圧縮
-            const compressedBase64 = await compressImage(file, 800, 800, 0.6);
-            await setDoc(imageDocRef, { base64: compressedBase64 });
-            uploadStatus.textContent = "✅ 同期完了";
-        } catch (error) {
-            alert("アップロード中にエラーが発生しました。:\n" + error.message);
-            uploadStatus.textContent = "❌ 失敗";
-        }
-    });
+    // 🚨【最終兵器】何が起きても必ずエラーをアラート通知するアップロード処理
+    if (fileInput) {
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) {
+                alert("ファイルが選択されていません。");
+                return;
+            }
+            
+            uploadStatus.textContent = "⏳ 画像処理中...";
+            
+            try {
+                // 無料枠で絶対にエラーが出ないようにさらに超軽量化 (500x500画素)
+                const compressedBase64 = await compressImage(file, 500, 500, 0.5);
+                uploadStatus.textContent = "⏳ クラウドへ同期中...";
+                
+                await setDoc(imageDocRef, { base64: compressedBase64 });
+                uploadStatus.textContent = "✅ 同期完了しました！";
+                
+            } catch (error) {
+                // 画面に強制的にポップアップエラーを出す
+                alert("【エラー発生】保存できませんでした！理由:\n" + error.message + "\n\n※Firebaseのルール設定、またはログイン状態を確認してください。");
+                uploadStatus.textContent = "❌ 失敗: " + error.message;
+            }
+        });
+    } else {
+        alert("プログラムエラー: HTMLのファイル選択ボタンが見つかりません。");
+    }
 
-    // クラウドから色ラベルを非同期で安全に同期
+    // 色ラベル同期
     onSnapshot(labelsDocRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
@@ -310,7 +323,7 @@
             colorMap["#ffcc00"] = labelYellow.value = optYellow.textContent = data.yellow || "保留";
             colorMap["#34c759"] = labelGreen.value = optGreen.textContent = data.green || "その他";
         }
-    }, (err) => { console.log("ラベル読み込み待機中..."); });
+    }, (err) => { console.log("ラベル初期化待ち"); });
 
     saveLabelsBtn.addEventListener('click', async () => {
         try {
@@ -332,7 +345,7 @@
 
     pinPhotoInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (file) { currentPinPhotoData = await compressImage(file, 400, 400, 0.5); }
+        if (file) { currentPinPhotoData = await compressImage(file, 300, 300, 0.5); }
     });
 
     container.addEventListener('click', (e) => {
@@ -378,4 +391,50 @@
             pin.style.left = pinData.x + '%';
             pin.style.top = pinData.y + '%';
             
-            const pinColor = pinData.color
+            const pinColor = pinData.color || "#ff3b30";
+            pin.style.backgroundColor = pinColor;
+
+            pin.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectedPinId = pinId;
+                viewText.textContent = pinData.note || "（メモはありません）";
+                if (pinData.photo) {
+                    viewPhoto.src = pinData.photo; viewPhoto.style.display = 'block';
+                } else { viewPhoto.style.display = 'none'; }
+                
+                viewTag.style.backgroundColor = pinColor;
+                viewTag.textContent = colorMap[pinColor] || "カテゴリー";
+
+                viewDates.innerHTML = `作成日: ${formatDate(pinData.createdAt)}<br>最終編集: ${formatDate(pinData.updatedAt)}`;
+                viewBox.style.display = 'block'; overlay.style.display = 'block';
+            });
+            container.appendChild(pin);
+        });
+    }, (err) => { console.log("ピンデータ読み込み待機中..."); });
+
+    editBtn.addEventListener('click', () => {
+        isEditing = true;
+        modalTitle.textContent = "✏️ メモを編集";
+        memoText.value = viewText.textContent === "（メモはありません）" ? "" : viewText.textContent;
+        photoInputGroup.style.display = 'none';
+        colorSelectGroup.style.display = 'none';
+        viewBox.style.display = 'none'; memoBox.style.display = 'block';
+    });
+
+    deleteBtn.addEventListener('click', async () => {
+        if (confirm("このピンを削除してもよろしいですか？")) {
+            const pinDocRef = doc(db, "pins", selectedPinId);
+            await deleteDoc(pinDocRef); closeModal();
+        }
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    closeViewBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', closeModal);
+    
+    function closeModal() {
+        memoBox.style.display = 'none'; viewBox.style.display = 'none'; overlay.style.display = 'none';
+    }
+</script>
+</body>
+</html>
