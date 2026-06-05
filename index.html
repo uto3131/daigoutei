@@ -1,10 +1,22 @@
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>見取り図アプリ</title>
+</head>
+<body>
+    <h1>見取り図共有アプリ</h1>
+    <input type="file" id="file-input" accept="image/*">
+    <div id="map-area" style="margin-top:20px;">
+        <img id="blueprint" style="max-width:800px; border:1px solid #ccc; display:none;">
+    </div>
 
-    const firebaseConfig = {
-        // ※ここに先ほどの鍵を必ず貼り付けてください
-    const firebaseConfig = {
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ここにあなたの鍵を再確認して入れてください
+        const firebaseConfig = {
   apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
   authDomain: "daigoutei-191b2.firebaseapp.com",
   projectId: "daigoutei-191b2",
@@ -13,28 +25,36 @@
   appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
 };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const blueprintDocRef = doc(db, "settings", "blueprintImage");
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            const docRef = doc(db, "settings", "blueprintImage");
 
-    // 画像アップロード処理
-    document.getElementById('file-input').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            // Firestoreだけに保存する（Storageは使わない！）
-            await setDoc(blueprintDocRef, { base64: event.target.result });
-            alert("同期しました！");
-        };
-        reader.readAsDataURL(file);
-    });
+            // 1. アップロード処理
+            document.getElementById('file-input').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        await setDoc(docRef, { base64: event.target.result });
+                        alert("保存成功！");
+                    } catch (e) { alert("保存エラー: " + e.message); }
+                };
+                reader.readAsDataURL(file);
+            });
 
-    // 画像読み込み処理
-    onSnapshot(blueprintDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const imgElement = document.getElementById('blueprint');
-            imgElement.src = docSnap.data().base64;
-            imgElement.style.display = 'block';
+            // 2. リアルタイム取得処理
+            onSnapshot(docRef, (docSnap) => {
+                const img = document.getElementById('blueprint');
+                if (docSnap.exists()) {
+                    img.src = docSnap.data().base64;
+                    img.style.display = 'block';
+                }
+            });
+        } catch (e) {
+            document.body.innerHTML = "<h1>エラーが発生しました</h1><p>" + e.message + "</p>";
         }
-    });
-</script>
+    </script>
+</body>
+</html>
