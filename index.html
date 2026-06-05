@@ -3,136 +3,254 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図メモアプリ（リアルタイム共有版）</title>
+    <title>見取り図共有アプリ（自動圧縮機能付き）</title>
     <style>
+        /* 全体のベースデザイン */
         body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-            margin: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
             background-color: #f5f5f7;
-            color: #333;
+            color: #1d1d1f;
         }
-        h1 { font-size: 24px; }
-        #controls { margin-bottom: 20px; }
         
-        /* 見取り図エリア */
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        p.subtitle {
+            color: #86868b;
+            margin-top: 0;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        
+        /* コントロールエリア */
+        #controls {
+            background: #ffffff;
+            padding: 16px 20px;
+            border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* ファイル選択ボタン */
+        .file-label {
+            background: #f5f5f7;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            border: 1px solid #d2d2d7;
+            transition: all 0.2s;
+        }
+        .file-label:hover { background: #e8e8ed; }
+        #file-input { display: none; }
+        
+        /* 見取り図表示エリア */
+        #map-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
         #map-container {
             position: relative;
             display: inline-block;
-            border: 2px dashed #ccc;
-            background-color: #fff;
+            background-color: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            overflow: hidden;
             max-width: 100%;
+            border: 1px solid rgba(0,0,0,0.05);
         }
+
         #blueprint {
             display: block;
             max-width: 100%;
             height: auto;
         }
+
+        #no-image-placeholder {
+            padding: 80px 40px;
+            text-align: center;
+            color: #86868b;
+            font-size: 15px;
+        }
         
         /* ピンのスタイル */
         .pin {
             position: absolute;
-            width: 24px;
-            height: 24px;
+            width: 20px;
+            height: 20px;
             background-color: #ff3b30;
-            border: 2px solid #fff;
+            border: 2.5px solid #ffffff;
             border-radius: 50%;
             transform: translate(-50%, -50%);
             cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            box-shadow: 0 3px 8px rgba(255, 59, 48, 0.4);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .pin:hover {
+            transform: translate(-50%, -50%) scale(1.25);
+            background-color: #ff453a;
         }
         
-        /* ポップアップ（共通） */
+        /* ポップアップ（モーダル） */
         .modal {
             display: none;
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 24px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
             z-index: 100;
             width: 320px;
             max-height: 80vh;
             overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.4);
         }
+
+        .modal h3 {
+            margin-top: 0;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
         .modal textarea {
             width: 100%;
-            height: 80px;
-            margin-bottom: 10px;
+            height: 90px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #d2d2d7;
+            font-size: 14px;
             box-sizing: border-box;
+            background: #f5f5f7;
+            resize: none;
+            outline: none;
         }
+        .modal textarea:focus { border-color: #0071e3; background: #fff; }
+
         #overlay {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4);
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
             z-index: 99;
         }
+
+        /* ボタン */
         .btn {
-            background: #007aff;
+            background: #0071e3;
             color: white;
             border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
             cursor: pointer;
         }
-        .btn-cancel { background: #8e8e93; }
+        .btn:hover { background: #0077ed; }
+        .btn-cancel { background: #86868b; color: white; margin-left: 8px; }
+        .btn-cancel:hover { background: #6e6e73; }
         
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 16px;
+        }
+
         #view-photo {
             max-width: 100%;
             height: auto;
-            border-radius: 6px;
-            margin-top: 10px;
+            border-radius: 10px;
+            margin-top: 14px;
             display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
-        .input-group { margin-bottom: 15px; }
+        .input-group { margin-bottom: 16px; }
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #6e6e73;
+            margin-bottom: 6px;
+        }
     </style>
 </head>
 <body>
 
-    <h1>🗺 見取り図ピン留めアプリ（リアルタイム共有版）</h1>
+<div class="container">
+    <h1>🗺 見取り図ピン留めアプリ</h1>
+    <p class="subtitle">画像の上をクリックすると、その場所にクラウド同期のピンとメモを残せます。</p>
     
     <div id="controls">
-        <label>① 見取り図を選択（各自の画面表示用）：</label>
+        <label for="file-input" class="file-label">📸 見取り図をアップロード（自動圧縮付き）</label>
         <input type="file" id="file-input" accept="image/*">
+        <span id="upload-status" style="font-size:13px; color:#0071e3; font-weight: 600;"></span>
     </div>
 
-    <div id="map-container">
-        <img id="blueprint" src="" alt="画像を選択してください" style="display:none;">
+    <div id="map-wrapper">
+        <div id="map-container">
+            <div id="no-image-placeholder">見取り図がありません。上のボタンからアップロードしてください。</div>
+            <img id="blueprint" src="" alt="見取り図" style="display:none;">
+        </div>
     </div>
+</div>
 
-    <div id="overlay"></div>
+<div id="overlay"></div>
 
-    <div id="memo-box" class="modal">
-        <h3>📌 情報をクラウドに記録</h3>
-        <div class="input-group">
-            <label>テキストメモ：</label>
-            <textarea id="memo-text" placeholder="ここにメモを入力..."></textarea>
-        </div>
-        <div class="input-group">
-            <label>写真を追加：</label>
-            <input type="file" id="pin-photo-input" accept="image/*">
-        </div>
+<div id="memo-box" class="modal">
+    <h3>📌 情報をクラウドに記録</h3>
+    <div class="input-group">
+        <label>テキストメモ</label>
+        <textarea id="memo-text" placeholder="ここにメモを入力..."></textarea>
+    </div>
+    <div class="input-group">
+        <label>写真を追加</label>
+        <input type="file" id="pin-photo-input" accept="image/*">
+    </div>
+    <div class="modal-buttons">
         <button class="btn" id="save-btn">保存</button>
         <button class="btn btn-cancel" id="cancel-btn">キャンセル</button>
     </div>
+</div>
 
-    <div id="view-box" class="modal">
-        <h3>📌 クラウドの記録内容</h3>
-        <p id="view-text" style="white-space: pre-wrap;"></p>
-        <img id="view-photo" src="" alt="添付写真">
-        <br><br>
-        <button class="btn btn-cancel" id="close-view-btn">閉じる</button>
+<div id="view-box" class="modal">
+    <h3>📌 クラウドの記録内容</h3>
+    <p id="view-text" style="white-space: pre-wrap; font-size: 15px; line-height: 1.5; margin: 0;"></p>
+    <img id="view-photo" src="" alt="添付写真">
+    <div class="modal-buttons">
+        <button class="btn btn-cancel" id="close-view-btn" style="margin-left:0;">閉じる</button>
     </div>
+</div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // ⚠️【コピペエリア】あなたのFirebase画面にある「const firebaseConfig = { ... };」を以下に丸ごと上書き貼り付けしてください。
-        const firebaseConfig = {
+    // ⚠️【コピペエリア】あなたのFirebaseの鍵を貼り付けてください。
+   const firebaseConfig = {
   apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
   authDomain: "daigoutei-191b2.firebaseapp.com",
   projectId: "daigoutei-191b2",
@@ -141,142 +259,172 @@
   appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
 };
 
-        // Firebaseの初期化
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const pinsCollection = collection(db, "pins"); // "pins"という名前の金庫を作る
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const pinsCollection = collection(db, "pins");
+    const imageDocRef = doc(db, "settings", "blueprintImage");
 
-        // 画面要素の取得
-        const fileInput = document.getElementById('file-input');
-        const blueprint = document.getElementById('blueprint');
-        const container = document.getElementById('map-container');
-        const memoBox = document.getElementById('memo-box');
-        const viewBox = document.getElementById('view-box');
-        const overlay = document.getElementById('overlay');
-        const memoText = document.getElementById('memo-text');
-        const pinPhotoInput = document.getElementById('pin-photo-input');
-        const saveBtn = document.getElementById('save-btn');
-        const cancelBtn = document.getElementById('cancel-btn');
-        
-        const viewText = document.getElementById('view-text');
-        const viewPhoto = document.getElementById('view-photo');
-        const closeViewBtn = document.getElementById('close-view-btn');
+    const fileInput = document.getElementById('file-input');
+    const blueprint = document.getElementById('blueprint');
+    const container = document.getElementById('map-container');
+    const placeholder = document.getElementById('no-image-placeholder');
+    const uploadStatus = document.getElementById('upload-status');
+    
+    const memoBox = document.getElementById('memo-box');
+    const viewBox = document.getElementById('view-box');
+    const overlay = document.getElementById('overlay');
+    const memoText = document.getElementById('memo-text');
+    const pinPhotoInput = document.getElementById('pin-photo-input');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    
+    const viewText = document.getElementById('view-text');
+    const viewPhoto = document.getElementById('view-photo');
+    const closeViewBtn = document.getElementById('close-view-btn');
 
-        let currentCoords = { x: 0, y: 0 };
-        let currentPinPhotoData = ""; 
+    let currentCoords = { x: 0, y: 0 };
+    let currentPinPhotoData = ""; 
 
-        // 1. ローカルでの見取り図表示（見取り図画像は各自が端末で選ぶ形にしています）
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedImage = localStorage.getItem('myBlueprintImgShared');
-            if (savedImage) {
-                blueprint.src = savedImage;
-                blueprint.style.display = 'block';
-            }
-        });
+    // ★【重要機能】画像を自動で小さく圧縮する関数
+    function compressImage(file, maxWidth, maxHeight, quality) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = event => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
 
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    blueprint.src = event.target.result;
-                    blueprint.style.display = 'block';
-                    localStorage.setItem('myBlueprintImgShared', event.target.result);
-                }
-                reader.readAsDataURL(file);
-            }
-        });
-
-        // 2. 写真のBase64変換
-        pinPhotoInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    currentPinPhotoData = event.target.result;
-                }
-                reader.readAsDataURL(file);
-            } else {
-                currentPinPhotoData = "";
-            }
-        });
-
-        // 3. クリックでポップアップを開く
-        container.addEventListener('click', (e) => {
-            if (e.target === blueprint || e.target === container) {
-                const rect = container.getBoundingClientRect();
-                currentCoords.x = ((e.clientX - rect.left) / rect.width) * 100;
-                currentCoords.y = ((e.clientY - rect.top) / rect.height) * 100;
-
-                memoText.value = '';
-                pinPhotoInput.value = '';
-                currentPinPhotoData = "";
-                memoBox.style.display = 'block';
-                overlay.style.display = 'block';
-            }
-        });
-
-        // 4. 【重要】クラウド（Firebase）へデータを保存する
-        saveBtn.addEventListener('click', async () => {
-            const text = memoText.value;
-            
-            try {
-                // Firebaseの「pins」金庫にデータを追加！
-                await addDoc(pinsCollection, {
-                    x: currentCoords.x,
-                    y: currentCoords.y,
-                    note: text,
-                    photo: currentPinPhotoData,
-                    createdAt: new Date().getTime() // 念のため作成日時も記録
-                });
-                closeModal();
-            } catch (error) {
-                console.error("データ保存エラー: ", error);
-                alert("データの保存に失敗しました。Firebaseの設定を確認してください。");
-            }
-        });
-
-        // 5. 【重要】クラウドのデータをリアルタイムに監視して画面にピンを描画する
-        // これがあるおかげで、別の人がピンを打っても自動で画面が更新されます！
-        onSnapshot(pinsCollection, (snapshot) => {
-            // 一度古いピンを消す
-            document.querySelectorAll('.pin').forEach(pin => pin.remove());
-
-            // クラウドにある最新のデータ一覧をループ処理
-            snapshot.forEach((doc) => {
-                const pinData = doc.data();
-                
-                const pin = document.createElement('div');
-                pin.className = 'pin';
-                pin.style.left = pinData.x + '%';
-                pin.style.top = pinData.y + '%';
-
-                pin.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    viewText.textContent = pinData.note || "（メモはありません）";
-                    if (pinData.photo) {
-                        viewPhoto.src = pinData.photo;
-                        viewPhoto.style.display = 'block';
+                    if (width > height) {
+                        if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
                     } else {
-                        viewPhoto.style.display = 'none';
+                        if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
                     }
-                    viewBox.style.display = 'block';
-                    overlay.style.display = 'block';
-                });
-
-                container.appendChild(pin);
-            });
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+            };
+            reader.onerror = error => reject(error);
         });
+    }
 
-        cancelBtn.addEventListener('click', closeModal);
-        closeViewBtn.addEventListener('click', closeModal);
-        overlay.addEventListener('click', closeModal);
-        
-        function closeModal() {
-            memoBox.style.display = 'none';
-            viewBox.style.display = 'none';
-            overlay.style.display = 'none';
+    // クラウドから見取り図をリアルタイム同期
+    onSnapshot(imageDocRef, (docSnap) => {
+        if (docSnap.exists() && docSnap.data().base64) {
+            blueprint.src = docSnap.data().base64;
+            blueprint.style.display = 'block';
+            placeholder.style.display = 'none';
+            uploadStatus.textContent = "最新データと同期中";
         }
-    </script>
+    });
+
+    // 見取り図アップロード（ここで自動圧縮を発動！）
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            uploadStatus.textContent = "⏳ 画像を圧縮＆同期中...";
+            try {
+                // どんなに大きな画像でも、横縦最大1200px、画質70%のコンパクトなJPGに変換（約300KB前後になります）
+                const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
+                await setDoc(imageDocRef, { base64: compressedBase64 });
+                uploadStatus.textContent = "✅ 同期完了";
+            } catch (error) {
+                console.error(error);
+                alert("画像の同期に失敗しました。");
+                uploadStatus.textContent = "❌ 失敗";
+            }
+        }
+    });
+
+    // ピン内の写真アップロード（ここでも自動圧縮を発動！）
+    pinPhotoInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            try {
+                // ピンの中の写真も最大600pxに自動圧縮（超軽量化）
+                currentPinPhotoData = await compressImage(file, 600, 600, 0.7);
+            } catch (error) {
+                currentPinPhotoData = "";
+            }
+        } else {
+            currentPinPhotoData = "";
+        }
+    });
+
+    // クリックでポップアップ
+    container.addEventListener('click', (e) => {
+        if (e.target === blueprint || e.target === container) {
+            const rect = container.getBoundingClientRect();
+            currentCoords.x = ((e.clientX - rect.left) / rect.width) * 100;
+            currentCoords.y = ((e.clientY - rect.top) / rect.height) * 100;
+
+            memoText.value = '';
+            pinPhotoInput.value = '';
+            currentPinPhotoData = "";
+            memoBox.style.display = 'block';
+            overlay.style.display = 'block';
+        }
+    });
+
+    // クラウド保存
+    saveBtn.addEventListener('click', async () => {
+        try {
+            await addDoc(pinsCollection, {
+                x: currentCoords.x,
+                y: currentCoords.y,
+                note: memoText.value,
+                photo: currentPinPhotoData,
+                createdAt: new Date().getTime()
+            });
+            closeModal();
+        } catch (error) {
+            alert("保存に失敗しました。");
+        }
+    });
+
+    // クラウドのピンをリアルタイム描画
+    onSnapshot(pinsCollection, (snapshot) => {
+        document.querySelectorAll('.pin').forEach(pin => pin.remove());
+
+        snapshot.forEach((doc) => {
+            const pinData = doc.data();
+            const pin = document.createElement('div');
+            pin.className = 'pin';
+            pin.style.left = pinData.x + '%';
+            pin.style.top = pinData.y + '%';
+
+            pin.addEventListener('click', (e) => {
+                e.stopPropagation();
+                viewText.textContent = pinData.note || "（メモはありません）";
+                if (pinData.photo) {
+                    viewPhoto.src = pinData.photo;
+                    viewPhoto.style.display = 'block';
+                } else {
+                    viewPhoto.style.display = 'none';
+                }
+                viewBox.style.display = 'block';
+                overlay.style.display = 'block';
+            });
+
+            container.appendChild(pin);
+        });
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+    closeViewBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', closeModal);
+    
+    function closeModal() {
+        memoBox.style.display = 'none';
+        viewBox.style.display = 'none';
+        overlay.style.display = 'none';
+    }
+</script>
 </body>
 </html>
