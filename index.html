@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図共有アプリ（安全強化版）</title>
+    <title>見取り図共有アプリ（完全無料・安全強化版）</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -198,7 +198,7 @@
     import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // ⚠️【コピペエリア】あなたのFirebaseの鍵を貼り付けてください。
-    const firebaseConfig = {
+   const firebaseConfig = {
   apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
   authDomain: "daigoutei-191b2.firebaseapp.com",
   projectId: "daigoutei-191b2",
@@ -266,6 +266,7 @@
         return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
+    // 完全に無料プラン枠に収めるため、画像を限界まで圧縮（容量を最軽量化）
     function compressImage(file, maxWidth, maxHeight, quality) {
         return new Promise((resolve) => {
             const reader = new FileReader(); reader.readAsDataURL(file);
@@ -284,17 +285,18 @@
         });
     }
 
-    // ⚡ 【最優先保護】見取り図アップロード命令（他がバグっても確実に単独で動くように設定）
+    // Storageを使わず、Firestore（無料枠）に直接画像を安全保存する仕組みに変更
     fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         uploadStatus.textContent = "⏳ 同期中...";
         try {
-            const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
+            // 無料データベース用にサイズを最適に圧縮
+            const compressedBase64 = await compressImage(file, 800, 800, 0.6);
             await setDoc(imageDocRef, { base64: compressedBase64 });
             uploadStatus.textContent = "✅ 同期完了";
         } catch (error) {
-            alert("アップロード中にエラーが発生しました。Firebaseのルールを確認してください:\n" + error.message);
+            alert("アップロード中にエラーが発生しました。:\n" + error.message);
             uploadStatus.textContent = "❌ 失敗";
         }
     });
@@ -330,7 +332,7 @@
 
     pinPhotoInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (file) { currentPinPhotoData = await compressImage(file, 600, 600, 0.7); }
+        if (file) { currentPinPhotoData = await compressImage(file, 400, 400, 0.5); }
     });
 
     container.addEventListener('click', (e) => {
@@ -376,16 +378,4 @@
             pin.style.left = pinData.x + '%';
             pin.style.top = pinData.y + '%';
             
-            const pinColor = pinData.color || "#ff3b30";
-            pin.style.backgroundColor = pinColor;
-
-            pin.addEventListener('click', (e) => {
-                e.stopPropagation();
-                selectedPinId = pinId;
-                viewText.textContent = pinData.note || "（メモはありません）";
-                if (pinData.photo) {
-                    viewPhoto.src = pinData.photo; viewPhoto.style.display = 'block';
-                } else { viewPhoto.style.display = 'none'; }
-                
-                viewTag.style.backgroundColor = pinColor;
-                viewTag.textContent = colorMap[pinColor] || "カテゴリー";
+            const pinColor = pinData.color
