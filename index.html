@@ -2,59 +2,76 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>見取り図アプリ</title>
+    <title>見取り図ピン留めアプリ</title>
+    <style>
+        #map-container { position: relative; display: inline-block; }
+        .pin { position: absolute; width: 20px; height: 20px; background: red; border-radius: 50%; cursor: pointer; }
+    </style>
 </head>
 <body>
     <h1>見取り図共有アプリ</h1>
     <input type="file" id="file-input" accept="image/*">
-    <div id="map-area" style="margin-top:20px;">
-        <img id="blueprint" style="max-width:800px; border:1px solid #ccc; display:none;">
+    <div id="map-container">
+        <img id="blueprint" style="max-width:800px; display:none;">
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // ここにあなたの鍵を再確認して入れてください
         const firebaseConfig = {
-  apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
-  authDomain: "daigoutei-191b2.firebaseapp.com",
-  projectId: "daigoutei-191b2",
-  storageBucket: "daigoutei-191b2.firebasestorage.app",
-  messagingSenderId: "724185590715",
-  appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
-};
+            apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
+            authDomain: "daigoutei-191b2.firebaseapp.com",
+            projectId: "daigoutei-191b2",
+            storageBucket: "daigoutei-191b2.firebasestorage.app",
+            messagingSenderId: "724185590715",
+            appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
+        };
 
-        try {
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            const docRef = doc(db, "settings", "blueprintImage");
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const blueprintDocRef = doc(db, "settings", "blueprintImage");
+        const pinsCollection = collection(db, "pins");
 
-            // 1. アップロード処理
-            document.getElementById('file-input').addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    try {
-                        await setDoc(docRef, { base64: event.target.result });
-                        alert("保存成功！");
-                    } catch (e) { alert("保存エラー: " + e.message); }
-                };
-                reader.readAsDataURL(file);
+        // 1. 画像表示
+        onSnapshot(blueprintDocRef, (docSnap) => {
+            const img = document.getElementById('blueprint');
+            if (docSnap.exists()) {
+                img.src = docSnap.data().base64;
+                img.style.display = 'block';
+            }
+        });
+
+        // 2. 画像保存
+        document.getElementById('file-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                await setDoc(blueprintDocRef, { base64: ev.target.result });
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 3. ピンの表示と追加（クリック位置にピンを出す）
+        const container = document.getElementById('map-container');
+        container.addEventListener('click', async (e) => {
+            const rect = container.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+            await addDoc(pinsCollection, { x, y });
+        });
+
+        onSnapshot(pinsCollection, (snapshot) => {
+            document.querySelectorAll('.pin').forEach(p => p.remove());
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                const pin = document.createElement('div');
+                pin.className = 'pin';
+                pin.style.left = data.x + '%';
+                pin.style.top = data.y + '%';
+                container.appendChild(pin);
             });
-
-            // 2. リアルタイム取得処理
-            onSnapshot(docRef, (docSnap) => {
-                const img = document.getElementById('blueprint');
-                if (docSnap.exists()) {
-                    img.src = docSnap.data().base64;
-                    img.style.display = 'block';
-                }
-            });
-        } catch (e) {
-            document.body.innerHTML = "<h1>エラーが発生しました</h1><p>" + e.message + "</p>";
-        }
+        });
     </script>
 </body>
 </html>
