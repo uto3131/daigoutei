@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図共有アプリ（高機能版）</title>
+    <title>見取り図共有アプリ</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -13,7 +13,6 @@
         h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.5px; }
         p.subtitle { color: #86868b; margin-top: 0; margin-bottom: 20px; font-size: 13px; }
         
-        /* 閲覧専用モード用の案内バナー */
         #view-only-banner {
             display: none; background: #e3f2fd; color: #0d47a1; padding: 10px 16px;
             border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 15px; border: 1px solid #bbdefb;
@@ -33,9 +32,7 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.05);
             box-sizing: border-box;
         }
-        @media (min-width: 768px) {
-            .config-panel { width: 280px; }
-        }
+        @media (min-width: 768px) { .config-panel { width: 280px; } }
         
         .config-panel h3 { margin-top: 0; font-size: 16px; font-weight: 600; margin-bottom: 12px; }
         .label-group { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
@@ -73,7 +70,7 @@
             border: 2.5px solid #ffffff; border-radius: 50%; transform: translate(-50%, -50%);
             cursor: grab; box-shadow: 0 3px 8px rgba(0,0,0,0.25);
             transition: transform 0.1s ease; z-index: 10;
-            touch-action: none; /* スマホでのドラッグをスムーズにするおまじない */
+            touch-action: none;
         }
         .pin:active { cursor: grabbing; transform: translate(-50%, -50%) scale(1.3); z-index: 100; }
         
@@ -111,9 +108,7 @@
         .input-group label { display: block; font-size: 13px; font-weight: 600; color: #6e6e73; margin-bottom: 6px; }
         .date-info { font-size: 11px; color: #86868b; margin-top: 12px; line-height: 1.4; border-top: 1px solid #e8e8ed; padding-top: 8px; }
         
-        /* タイトル文字を消して、タグ自体をすっきり美しく見せるスタイルに変更 */
         .category-tag { font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 6px; color: white; margin-bottom: 14px; display: inline-block;}
-        
         .share-link-box {
             background: #f5f5f7; padding: 10px; border-radius: 8px; border: 1px solid #d2d2d7;
             font-size: 12px; word-break: break-all; margin-top: 5px; user-select: all;
@@ -215,7 +210,7 @@
     import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // ⚠️【コピペエリア】あなたのFirebaseの鍵を貼り付けてください。
-   const firebaseConfig = {
+    const firebaseConfig = {
   apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
   authDomain: "daigoutei-191b2.firebaseapp.com",
   projectId: "daigoutei-191b2",
@@ -224,11 +219,9 @@
   appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
 };
 
-    // 🔗 URLパラメータを解析して「閲覧専用モード」かチェック
     const urlParams = new URLSearchParams(window.location.search);
     const isViewOnly = urlParams.get('mode') === 'view';
 
-    // 閲覧専用モードなら、ボタンや設定用UIを非表示にする
     if (isViewOnly) {
         document.getElementById('view-only-banner').style.display = 'block';
         document.getElementById('upload-area').style.display = 'none';
@@ -239,14 +232,13 @@
         });
     }
 
-    // 🔗 閲覧専用リンク生成処理
     document.getElementById('gen-view-btn').addEventListener('click', () => {
         const baseUrl = window.location.href.split('?')[0];
         const viewUrl = `${baseUrl}?mode=view`;
         const resultBox = document.getElementById('share-url-result');
         resultBox.textContent = viewUrl;
         resultBox.style.display = 'block';
-        alert("閲覧専用のURLを発行しました！ボックス内のURLをコピーして共有してください。");
+        alert("閲覧専用のURLを発行しました！");
     });
 
     let db; let pinsCollection; let imageDocRef; let labelsDocRef;
@@ -257,7 +249,7 @@
         imageDocRef = doc(db, "settings", "blueprintImage");
         labelsDocRef = doc(db, "settings", "colorLabels");
     } catch (e) {
-        alert("Firebaseの初期化に失敗しました。");
+        console.error("Firebase初期化エラー:", e);
     }
 
     const fileInput = document.getElementById('file-input');
@@ -308,8 +300,8 @@
         return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
-    function compressImage(file, maxWidth, maxHeight, quality) {
-        return new Promise((resolve, reject) => {
+    function compressImage(file, maxWidth, maxHeight) {
+        return new Promise((resolve) => {
             const reader = new FileReader(); reader.readAsDataURL(file);
             reader.onload = event => {
                 const img = new Image(); img.src = event.target.result;
@@ -320,7 +312,7 @@
                     else { if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; } }
                     canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', quality));
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
                 };
             };
         });
@@ -330,10 +322,9 @@
         fileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            uploadStatus.textContent = "⏳ 画像処理中...";
+            uploadStatus.textContent = "⏳ アップロード中...";
             try {
-                const compressedBase64 = await compressImage(file, 600, 600, 0.5);
-                uploadStatus.textContent = "⏳ クラウドへ同期中...";
+                const compressedBase64 = await compressImage(file, 800, 800);
                 await setDoc(imageDocRef, { base64: compressedBase64 });
                 uploadStatus.textContent = "✅ 同期完了しました！";
             } catch (error) {
@@ -343,16 +334,28 @@
         });
     }
 
-    // 色ラベル同期
-    onSnapshot(labelsDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            colorMap["#ff3b30"] = labelRed.value = optRed.textContent = data.red || "要補修";
-            colorMap["#007aff"] = labelBlue.value = optBlue.textContent = data.blue || "確認済み";
-            colorMap["#ffcc00"] = labelYellow.value = optYellow.textContent = data.yellow || "保留";
-            colorMap["#34c759"] = labelGreen.value = optGreen.textContent = data.green || "その他";
-        }
-    });
+    // ⭐【ガード処理】エラーが起きてもフリーズさせずに見取り図だけは出す
+    try {
+        onSnapshot(imageDocRef, (docSnap) => {
+            if (docSnap.exists() && docSnap.data().base64) {
+                blueprint.src = docSnap.data().base64;
+                blueprint.style.display = 'block';
+                placeholder.style.display = 'none';
+            }
+        }, (err) => { console.error("画像読み込みエラー:", err); });
+    } catch(e) { console.error(e); }
+
+    try {
+        onSnapshot(labelsDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                colorMap["#ff3b30"] = labelRed.value = optRed.textContent = data.red || "要補修";
+                colorMap["#007aff"] = labelBlue.value = optBlue.textContent = data.blue || "確認済み";
+                colorMap["#ffcc00"] = labelYellow.value = optYellow.textContent = data.yellow || "保留";
+                colorMap["#34c759"] = labelGreen.value = optGreen.textContent = data.green || "その他";
+            }
+        }, (err) => { console.error("ラベル権限エラー:", err); });
+    } catch(e) { console.error(e); }
 
     if (saveLabelsBtn) {
         saveLabelsBtn.addEventListener('click', async () => {
@@ -361,64 +364,9 @@
                     red: labelRed.value, blue: labelBlue.value, yellow: labelYellow.value, green: labelGreen.value
                 });
                 alert("色の名前を全員に同期しました！");
-            } catch (e) { alert("同期失敗: " + e.message); }
+            } catch (e) { alert("同期権限がありません: " + e.message); }
         });
     }
 
-    // 見取り図同期
-    onSnapshot(imageDocRef, (docSnap) => {
-        if (docSnap.exists() && docSnap.data().base64) {
-            blueprint.src = docSnap.data().base64;
-            blueprint.style.display = 'block';
-            placeholder.style.display = 'none';
-        }
-    });
-
     pinPhotoInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (file) { currentPinPhotoData = await compressImage(file, 300, 300, 0.5); }
-    });
-
-    container.addEventListener('click', (e) => {
-        if (isViewOnly) return; // 閲覧専用なら追加不可
-        if (e.target === blueprint || e.target === container) {
-            const rect = container.getBoundingClientRect();
-            currentCoords.x = ((e.clientX - rect.left) / rect.width) * 100;
-            currentCoords.y = ((e.clientY - rect.top) / rect.height) * 100;
-
-            isEditing = false;
-            modalTitle.textContent = "📌 情報をクラウドに記録";
-            memoText.value = ''; pinPhotoInput.value = ''; currentPinPhotoData = "";
-            photoInputGroup.style.display = 'block';
-            colorSelectGroup.style.display = 'block';
-            memoBox.style.display = 'block'; overlay.style.display = 'block';
-        }
-    });
-
-    saveBtn.addEventListener('click', async () => {
-        const now = new Date().getTime();
-        const selectedColor = document.querySelector('input[name="pin-color"]:checked').value;
-        try {
-            if (isEditing) {
-                const pinDocRef = doc(db, "pins", selectedPinId);
-                await updateDoc(pinDocRef, { note: memoText.value, updatedAt: now });
-            } else {
-                await addDoc(pinsCollection, {
-                    x: currentCoords.x, y: currentCoords.y, note: memoText.value,
-                    photo: currentPinPhotoData, color: selectedColor, createdAt: now, updatedAt: now
-                });
-            }
-            closeModal();
-        } catch (error) { alert("保存エラー: " + error.message); }
-    });
-
-    // 📌 ピンのドラッグ＆ドロップ（位置移動）処理の実装
-    let draggedPinId = null;
-
-    function setupPinDrag(pin, pinId) {
-        if (isViewOnly) return; // 閲覧専用モードなら移動不可
-
-        const startDrag = (e) => {
-            draggedPinId = pinId;
-            e.preventDefault();
-        };
