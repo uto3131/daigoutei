@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図メモアプリ（写真・保存機能付き）</title>
+    <title>見取り図メモアプリ（リアルタイム共有版）</title>
     <style>
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -79,9 +79,7 @@
             cursor: pointer;
         }
         .btn-cancel { background: #8e8e93; }
-        .btn-clear { background: #ff3b30; margin-left: 10px; }
         
-        /* 閲覧用ポップアップ内の画像 */
         #view-photo {
             max-width: 100%;
             height: auto;
@@ -89,19 +87,16 @@
             margin-top: 10px;
             display: none;
         }
-        .input-group {
-            margin-bottom: 15px;
-        }
+        .input-group { margin-bottom: 15px; }
     </style>
 </head>
 <body>
 
-    <h1>🗺 見取り図ピン留めアプリ（写真追加版）</h1>
+    <h1>🗺 見取り図ピン留めアプリ（リアルタイム共有版）</h1>
     
     <div id="controls">
-        <label>① 見取り図を選択：</label>
-        <input type="file" id="file-input" accept="image/jpeg, image/jpg, image/png">
-        <button class="btn btn-clear" id="clear-btn">ピンを全削除</button>
+        <label>① 見取り図を選択（各自の画面表示用）：</label>
+        <input type="file" id="file-input" accept="image/*">
     </div>
 
     <div id="map-container">
@@ -111,7 +106,7 @@
     <div id="overlay"></div>
 
     <div id="memo-box" class="modal">
-        <h3>📌 情報を記録</h3>
+        <h3>📌 情報をクラウドに記録</h3>
         <div class="input-group">
             <label>テキストメモ：</label>
             <textarea id="memo-text" placeholder="ここにメモを入力..."></textarea>
@@ -125,14 +120,33 @@
     </div>
 
     <div id="view-box" class="modal">
-        <h3>📌 記録された内容</h3>
+        <h3>📌 クラウドの記録内容</h3>
         <p id="view-text" style="white-space: pre-wrap;"></p>
         <img id="view-photo" src="" alt="添付写真">
         <br><br>
         <button class="btn btn-cancel" id="close-view-btn">閉じる</button>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ⚠️【コピペエリア】あなたのFirebase画面にある「const firebaseConfig = { ... };」を以下に丸ごと上書き貼り付けしてください。
+        const firebaseConfig = {
+  apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
+  authDomain: "daigoutei-191b2.firebaseapp.com",
+  projectId: "daigoutei-191b2",
+  storageBucket: "daigoutei-191b2.firebasestorage.app",
+  messagingSenderId: "724185590715",
+  appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
+};
+
+        // Firebaseの初期化
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const pinsCollection = collection(db, "pins"); // "pins"という名前の金庫を作る
+
+        // 画面要素の取得
         const fileInput = document.getElementById('file-input');
         const blueprint = document.getElementById('blueprint');
         const container = document.getElementById('map-container');
@@ -143,30 +157,23 @@
         const pinPhotoInput = document.getElementById('pin-photo-input');
         const saveBtn = document.getElementById('save-btn');
         const cancelBtn = document.getElementById('cancel-btn');
-        const clearBtn = document.getElementById('clear-btn');
         
         const viewText = document.getElementById('view-text');
         const viewPhoto = document.getElementById('view-photo');
         const closeViewBtn = document.getElementById('close-view-btn');
 
         let currentCoords = { x: 0, y: 0 };
-        let pinDataList = [];
-        let currentPinPhotoData = ""; // 一時的に写真データを保存する変数
+        let currentPinPhotoData = ""; 
 
-        // ページ読み込み時の復元
+        // 1. ローカルでの見取り図表示（見取り図画像は各自が端末で選ぶ形にしています）
         window.addEventListener('DOMContentLoaded', () => {
-            const savedPins = localStorage.getItem('myBlueprintPinsV2');
-            if (savedPins) pinDataList = JSON.parse(savedPins);
-            
-            const savedImage = localStorage.getItem('myBlueprintImgV2');
+            const savedImage = localStorage.getItem('myBlueprintImgShared');
             if (savedImage) {
                 blueprint.src = savedImage;
                 blueprint.style.display = 'block';
-                blueprint.onload = () => { renderPins(); };
             }
         });
 
-        // 見取り図アップロード
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
@@ -174,20 +181,19 @@
                 reader.onload = function(event) {
                     blueprint.src = event.target.result;
                     blueprint.style.display = 'block';
-                    localStorage.setItem('myBlueprintImgV2', event.target.result);
-                    renderPins();
+                    localStorage.setItem('myBlueprintImgShared', event.target.result);
                 }
                 reader.readAsDataURL(file);
             }
         });
 
-        // ピン内の写真が選択されたとき、データを読み込む
+        // 2. 写真のBase64変換
         pinPhotoInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function(event) {
-                    currentPinPhotoData = event.target.result; // 写真データをBase64形式で保存
+                    currentPinPhotoData = event.target.result;
                 }
                 reader.readAsDataURL(file);
             } else {
@@ -195,7 +201,7 @@
             }
         });
 
-        // 画像クリックでピン作成
+        // 3. クリックでポップアップを開く
         container.addEventListener('click', (e) => {
             if (e.target === blueprint || e.target === container) {
                 const rect = container.getBoundingClientRect();
@@ -210,35 +216,43 @@
             }
         });
 
-        // 保存ボタン
-        saveBtn.addEventListener('click', () => {
-            pinDataList.push({
-                x: currentCoords.x,
-                y: currentCoords.y,
-                note: memoText.value,
-                photo: currentPinPhotoData // 写真データも一緒に保存
-            });
-
-            localStorage.setItem('myBlueprintPinsV2', JSON.stringify(pinDataList));
-            renderPins();
-            closeModal();
+        // 4. 【重要】クラウド（Firebase）へデータを保存する
+        saveBtn.addEventListener('click', async () => {
+            const text = memoText.value;
+            
+            try {
+                // Firebaseの「pins」金庫にデータを追加！
+                await addDoc(pinsCollection, {
+                    x: currentCoords.x,
+                    y: currentCoords.y,
+                    note: text,
+                    photo: currentPinPhotoData,
+                    createdAt: new Date().getTime() // 念のため作成日時も記録
+                });
+                closeModal();
+            } catch (error) {
+                console.error("データ保存エラー: ", error);
+                alert("データの保存に失敗しました。Firebaseの設定を確認してください。");
+            }
         });
 
-        // ピンの描画
-        function renderPins() {
+        // 5. 【重要】クラウドのデータをリアルタイムに監視して画面にピンを描画する
+        // これがあるおかげで、別の人がピンを打っても自動で画面が更新されます！
+        onSnapshot(pinsCollection, (snapshot) => {
+            // 一度古いピンを消す
             document.querySelectorAll('.pin').forEach(pin => pin.remove());
 
-            pinDataList.forEach((pinData) => {
+            // クラウドにある最新のデータ一覧をループ処理
+            snapshot.forEach((doc) => {
+                const pinData = doc.data();
+                
                 const pin = document.createElement('div');
                 pin.className = 'pin';
                 pin.style.left = pinData.x + '%';
                 pin.style.top = pinData.y + '%';
 
-                // ピンをクリックしたとき（詳細表示）
                 pin.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    
-                    // 閲覧用ポップアップにデータをセット
                     viewText.textContent = pinData.note || "（メモはありません）";
                     if (pinData.photo) {
                         viewPhoto.src = pinData.photo;
@@ -246,22 +260,12 @@
                     } else {
                         viewPhoto.style.display = 'none';
                     }
-                    
                     viewBox.style.display = 'block';
                     overlay.style.display = 'block';
                 });
 
                 container.appendChild(pin);
             });
-        }
-
-        // 全削除
-        clearBtn.addEventListener('click', () => {
-            if (confirm('すべてのピンを削除しますか？')) {
-                pinDataList = [];
-                localStorage.removeItem('myBlueprintPinsV2');
-                renderPins();
-            }
         });
 
         cancelBtn.addEventListener('click', closeModal);
