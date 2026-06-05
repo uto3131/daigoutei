@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>見取り図メモアプリ（写真・保存機能付き）</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f7;
+            color: #333;
+        }
+        h1 { font-size: 24px; }
+        #controls { margin-bottom: 20px; }
+        
+        /* 見取り図エリア */
+        #map-container {
+            position: relative;
+            display: inline-block;
+            border: 2px dashed #ccc;
+            background-color: #fff;
+            max-width: 100%;
+        }
+        #blueprint {
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }
+        
+        /* ピンのスタイル */
+        .pin {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background-color: #ff3b30;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        
+        /* ポップアップ（共通） */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 100;
+            width: 320px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal textarea {
+            width: 100%;
+            height: 80px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        #overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 99;
+        }
+        .btn {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .btn-cancel { background: #8e8e93; }
+        .btn-clear { background: #ff3b30; margin-left: 10px; }
+        
+        /* 閲覧用ポップアップ内の画像 */
+        #view-photo {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            margin-top: 10px;
+            display: none;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🗺 見取り図ピン留めアプリ（写真追加版）</h1>
+    
+    <div id="controls">
+        <label>① 見取り図を選択：</label>
+        <input type="file" id="file-input" accept="image/jpeg, image/jpg, image/png">
+        <button class="btn btn-clear" id="clear-btn">ピンを全削除</button>
+    </div>
+
+    <div id="map-container">
+        <img id="blueprint" src="" alt="画像を選択してください" style="display:none;">
+    </div>
+
+    <div id="overlay"></div>
+
+    <div id="memo-box" class="modal">
+        <h3>📌 情報を記録</h3>
+        <div class="input-group">
+            <label>テキストメモ：</label>
+            <textarea id="memo-text" placeholder="ここにメモを入力..."></textarea>
+        </div>
+        <div class="input-group">
+            <label>写真を追加：</label>
+            <input type="file" id="pin-photo-input" accept="image/*">
+        </div>
+        <button class="btn" id="save-btn">保存</button>
+        <button class="btn btn-cancel" id="cancel-btn">キャンセル</button>
+    </div>
+
+    <div id="view-box" class="modal">
+        <h3>📌 記録された内容</h3>
+        <p id="view-text" style="white-space: pre-wrap;"></p>
+        <img id="view-photo" src="" alt="添付写真">
+        <br><br>
+        <button class="btn btn-cancel" id="close-view-btn">閉じる</button>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const blueprint = document.getElementById('blueprint');
+        const container = document.getElementById('map-container');
+        const memoBox = document.getElementById('memo-box');
+        const viewBox = document.getElementById('view-box');
+        const overlay = document.getElementById('overlay');
+        const memoText = document.getElementById('memo-text');
+        const pinPhotoInput = document.getElementById('pin-photo-input');
+        const saveBtn = document.getElementById('save-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        
+        const viewText = document.getElementById('view-text');
+        const viewPhoto = document.getElementById('view-photo');
+        const closeViewBtn = document.getElementById('close-view-btn');
+
+        let currentCoords = { x: 0, y: 0 };
+        let pinDataList = [];
+        let currentPinPhotoData = ""; // 一時的に写真データを保存する変数
+
+        // ページ読み込み時の復元
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedPins = localStorage.getItem('myBlueprintPinsV2');
+            if (savedPins) pinDataList = JSON.parse(savedPins);
+            
+            const savedImage = localStorage.getItem('myBlueprintImgV2');
+            if (savedImage) {
+                blueprint.src = savedImage;
+                blueprint.style.display = 'block';
+                blueprint.onload = () => { renderPins(); };
+            }
+        });
+
+        // 見取り図アップロード
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    blueprint.src = event.target.result;
+                    blueprint.style.display = 'block';
+                    localStorage.setItem('myBlueprintImgV2', event.target.result);
+                    renderPins();
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // ピン内の写真が選択されたとき、データを読み込む
+        pinPhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    currentPinPhotoData = event.target.result; // 写真データをBase64形式で保存
+                }
+                reader.readAsDataURL(file);
+            } else {
+                currentPinPhotoData = "";
+            }
+        });
+
+        // 画像クリックでピン作成
+        container.addEventListener('click', (e) => {
+            if (e.target === blueprint || e.target === container) {
+                const rect = container.getBoundingClientRect();
+                currentCoords.x = ((e.clientX - rect.left) / rect.width) * 100;
+                currentCoords.y = ((e.clientY - rect.top) / rect.height) * 100;
+
+                memoText.value = '';
+                pinPhotoInput.value = '';
+                currentPinPhotoData = "";
+                memoBox.style.display = 'block';
+                overlay.style.display = 'block';
+            }
+        });
+
+        // 保存ボタン
+        saveBtn.addEventListener('click', () => {
+            pinDataList.push({
+                x: currentCoords.x,
+                y: currentCoords.y,
+                note: memoText.value,
+                photo: currentPinPhotoData // 写真データも一緒に保存
+            });
+
+            localStorage.setItem('myBlueprintPinsV2', JSON.stringify(pinDataList));
+            renderPins();
+            closeModal();
+        });
+
+        // ピンの描画
+        function renderPins() {
+            document.querySelectorAll('.pin').forEach(pin => pin.remove());
+
+            pinDataList.forEach((pinData) => {
+                const pin = document.createElement('div');
+                pin.className = 'pin';
+                pin.style.left = pinData.x + '%';
+                pin.style.top = pinData.y + '%';
+
+                // ピンをクリックしたとき（詳細表示）
+                pin.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    // 閲覧用ポップアップにデータをセット
+                    viewText.textContent = pinData.note || "（メモはありません）";
+                    if (pinData.photo) {
+                        viewPhoto.src = pinData.photo;
+                        viewPhoto.style.display = 'block';
+                    } else {
+                        viewPhoto.style.display = 'none';
+                    }
+                    
+                    viewBox.style.display = 'block';
+                    overlay.style.display = 'block';
+                });
+
+                container.appendChild(pin);
+            });
+        }
+
+        // 全削除
+        clearBtn.addEventListener('click', () => {
+            if (confirm('すべてのピンを削除しますか？')) {
+                pinDataList = [];
+                localStorage.removeItem('myBlueprintPinsV2');
+                renderPins();
+            }
+        });
+
+        cancelBtn.addEventListener('click', closeModal);
+        closeViewBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', closeModal);
+        
+        function closeModal() {
+            memoBox.style.display = 'none';
+            viewBox.style.display = 'none';
+            overlay.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
