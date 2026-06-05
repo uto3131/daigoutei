@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図共有アプリ（編集・削除機能付き）</title>
+    <title>見取り図共有アプリ（安定版）</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -19,26 +19,31 @@
             display: flex; align-items: center; gap: 16px;
         }
         .file-label {
-            background: #f5f5f7; padding: 10px 16px; border-radius: 8px; cursor: pointer;
-            font-weight: 500; font-size: 14px; border: 1px solid #d2d2d7; transition: all 0.2s;
+            background: #0071e3; color: white; padding: 12px 20px; border-radius: 8px; cursor: pointer;
+            font-weight: 500; font-size: 14px; transition: all 0.2s; display: inline-block;
         }
-        .file-label:hover { background: #e8e8ed; }
+        .file-label:hover { background: #0077ed; }
         #file-input { display: none; }
         
         #map-wrapper { display: flex; justify-content: center; align-items: flex-start; }
         #map-container {
             position: relative; display: inline-block; background-color: #ffffff;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); overflow: hidden;
-            max-width: 100%; border: 1px solid rgba(0,0,0,0.05);
+            max-width: 100%; border: 1px solid rgba(0,0,0,0.05); min-width: 320px; min-height: 200px;
         }
         #blueprint { display: block; max-width: 100%; height: auto; }
-        #no-image-placeholder { padding: 80px 40px; text-align: center; color: #86868b; font-size: 15px; }
+        
+        /* プレースホルダーを絶対配置にしてクリックを邪魔しないように修正 */
+        #no-image-placeholder {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; color: #86868b; font-size: 15px; width: 90%; pointer-events: none;
+        }
         
         .pin {
             position: absolute; width: 20px; height: 20px; background-color: #ff3b30;
             border: 2.5px solid #ffffff; border-radius: 50%; transform: translate(-50%, -50%);
             cursor: pointer; box-shadow: 0 3px 8px rgba(255, 59, 48, 0.4);
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10;
         }
         .pin:hover { transform: translate(-50%, -50%) scale(1.25); background-color: #ff453a; }
         
@@ -53,7 +58,6 @@
             width: 100%; height: 90px; padding: 10px; border-radius: 8px; border: 1px solid #d2d2d7;
             font-size: 14px; box-sizing: border-box; background: #f5f5f7; resize: none; outline: none;
         }
-        .modal textarea:focus { border-color: #0071e3; background: #fff; }
         #overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.3); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 99;
@@ -62,18 +66,13 @@
             background: #0071e3; color: white; border: none; padding: 10px 18px;
             border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer;
         }
-        .btn:hover { background: #0077ed; }
         .btn-cancel { background: #86868b; color: white; margin-left: 8px; }
-        .btn-cancel:hover { background: #6e6e73; }
-        .btn-danger { background: #ff3b30; color: white; margin-right: auto; } /* 削除用赤ボタン */
-        .btn-danger:hover { background: #ff453a; }
+        .btn-danger { background: #ff3b30; color: white; margin-right: auto; }
         
         .modal-buttons { display: flex; justify-content: flex-end; margin-top: 16px; gap: 8px; }
         #view-photo { max-width: 100%; height: auto; border-radius: 10px; margin-top: 14px; display: none; }
         .input-group { margin-bottom: 16px; }
         .input-group label { display: block; font-size: 13px; font-weight: 600; color: #6e6e73; margin-bottom: 6px; }
-        
-        /* 日付用の文字スタイル */
         .date-info { font-size: 11px; color: #86868b; margin-top: 12px; line-height: 1.4; }
     </style>
 </head>
@@ -81,17 +80,17 @@
 
 <div class="container">
     <h1>🗺 見取り図ピン留めアプリ</h1>
-    <p class="subtitle">ピンの追加・内容の編集・個別削除がリアルタイムに同期されます。</p>
+    <p class="subtitle">青いボタンから見取り図をアップロードしてください。リアルタイムに同期されます。</p>
     
     <div id="controls">
-        <label for="file-input" class="file-label">📸 見取り図をアップロード</label>
+        <label for="file-input" class="file-label">📸 見取り図を選択してアップロード</label>
         <input type="file" id="file-input" accept="image/*">
         <span id="upload-status" style="font-size:13px; color:#0071e3; font-weight: 600;"></span>
     </div>
 
     <div id="map-wrapper">
         <div id="map-container">
-            <div id="no-image-placeholder">見取り図がありません。上のボタンからアップロードしてください。</div>
+            <div id="no-image-placeholder">ここに選択した見取り図が表示されます</div>
             <img id="blueprint" src="" alt="見取り図" style="display:none;">
         </div>
     </div>
@@ -119,9 +118,7 @@
     <h3>📌 クラウドの記録内容</h3>
     <p id="view-text" style="white-space: pre-wrap; font-size: 15px; line-height: 1.5; margin: 0;"></p>
     <img id="view-photo" src="" alt="添付写真">
-    
     <div class="date-info" id="view-dates"></div>
-    
     <div class="modal-buttons">
         <button class="btn btn-danger" id="delete-btn">削除</button>
         <button class="btn" id="edit-btn" style="background:#0071e3;">編集</button>
@@ -143,10 +140,18 @@
   appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
 };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const pinsCollection = collection(db, "pins");
-    const imageDocRef = doc(db, "settings", "blueprintImage");
+    let db;
+    let pinsCollection;
+    let imageDocRef;
+
+    try {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        pinsCollection = collection(db, "pins");
+        imageDocRef = doc(db, "settings", "blueprintImage");
+    } catch (e) {
+        alert("Firebaseの初期化に失敗しました。鍵の設定を確認してください。\nエラー内容: " + e.message);
+    }
 
     const fileInput = document.getElementById('file-input');
     const blueprint = document.getElementById('blueprint');
@@ -173,19 +178,17 @@
 
     let currentCoords = { x: 0, y: 0 };
     let currentPinPhotoData = ""; 
-    let selectedPinId = null; // 現在選んでいるピンのIDを記憶する変数
-    let isEditing = false;    // 「新規作成」か「編集」かを判定するフラグ
+    let selectedPinId = null;
+    let isEditing = false;
 
-    // 日付フォーマット関数 (YYYY/MM/DD HH:MM)
     function formatDate(timestamp) {
         if (!timestamp) return "-";
         const d = new Date(timestamp);
         return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
-    // 画像自動圧縮関数
     function compressImage(file, maxWidth, maxHeight, quality) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = event => {
@@ -212,15 +215,23 @@
             blueprint.style.display = 'block';
             placeholder.style.display = 'none';
         }
+    }, (error) => {
+        alert("データの読み込みエラーが発生しました。Firebaseのルールを確認してください。\n" + error.message);
     });
 
+    // 見取り図アップロード
     fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
             uploadStatus.textContent = "⏳ 同期中...";
-            const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
-            await setDoc(imageDocRef, { base64: compressedBase64 });
-            uploadStatus.textContent = "✅ 同期完了";
+            try {
+                const compressedBase64 = await compressImage(file, 1200, 1200, 0.7);
+                await setDoc(imageDocRef, { base64: compressedBase64 });
+                uploadStatus.textContent = "✅ 同期完了";
+            } catch (error) {
+                alert("アップロード中にエラーが発生しました:\n" + error.message);
+                uploadStatus.textContent = "❌ 失敗";
+            }
         }
     });
 
@@ -229,7 +240,6 @@
         if (file) { currentPinPhotoData = await compressImage(file, 600, 600, 0.7); }
     });
 
-    // 新規ピン作成のためのクリック
     container.addEventListener('click', (e) => {
         if (e.target === blueprint || e.target === container) {
             const rect = container.getBoundingClientRect();
@@ -241,54 +251,44 @@
             memoText.value = '';
             pinPhotoInput.value = '';
             currentPinPhotoData = "";
-            photoInputGroup.style.display = 'block'; // 新規時は写真選択を出す
+            photoInputGroup.style.display = 'block';
             memoBox.style.display = 'block';
             overlay.style.display = 'block';
         }
     });
 
-    // 保存ボタン（新規作成 ＆ 上書き編集 の両方で使います）
     saveBtn.addEventListener('click', async () => {
         const now = new Date().getTime();
-        if (isEditing) {
-            // ★【新機能】上書き編集（updateDoc）
-            const pinDocRef = doc(db, "pins", selectedPinId);
-            await updateDoc(pinDocRef, {
-                note: memoText.value,
-                updatedAt: now // 最終編集日を更新
-            });
-        } else {
-            // 新規作成（addDoc）
-            await addDoc(pinsCollection, {
-                x: currentCoords.x,
-                y: currentCoords.y,
-                note: memoText.value,
-                photo: currentPinPhotoData,
-                createdAt: now,  // 作成日
-                updatedAt: now   // 初期状態は作成日と同じ
-            });
+        try {
+            if (isEditing) {
+                const pinDocRef = doc(db, "pins", selectedPinId);
+                await updateDoc(pinDocRef, { note: memoText.value, updatedAt: now });
+            } else {
+                await addDoc(pinsCollection, {
+                    x: currentCoords.x, y: currentCoords.y, note: memoText.value,
+                    photo: currentPinPhotoData, createdAt: now, updatedAt: now
+                });
+            }
+            closeModal();
+        } catch (error) {
+            alert("保存エラーが発生しました:\n" + error.message);
         }
-        closeModal();
     });
 
-    // クラウドのピンをリアルタイム描画
     onSnapshot(pinsCollection, (snapshot) => {
         document.querySelectorAll('.pin').forEach(pin => pin.remove());
-
         snapshot.forEach((docSnap) => {
             const pinData = docSnap.data();
-            const pinId = docSnap.id; // Firebaseが自動で割り振ったピン特有のID
+            const pinId = docSnap.id;
             
             const pin = document.createElement('div');
             pin.className = 'pin';
             pin.style.left = pinData.x + '%';
             pin.style.top = pinData.y + '%';
 
-            // ピンをクリックしたとき（詳細画面）
             pin.addEventListener('click', (e) => {
                 e.stopPropagation();
-                selectedPinId = pinId; // どのピンを選んだか記憶
-                
+                selectedPinId = pinId;
                 viewText.textContent = pinData.note || "（メモはありません）";
                 if (pinData.photo) {
                     viewPhoto.src = pinData.photo;
@@ -296,37 +296,44 @@
                 } else {
                     viewPhoto.style.display = 'none';
                 }
-                
-                // ★【新機能】日付の表示
                 viewDates.innerHTML = `作成日: ${formatDate(pinData.createdAt)}<br>最終編集: ${formatDate(pinData.updatedAt)}`;
-                
                 viewBox.style.display = 'block';
                 overlay.style.display = 'block';
             });
-
             container.appendChild(pin);
         });
     });
 
-    // ★【新機能】編集ボタンを押したとき
     editBtn.addEventListener('click', () => {
         isEditing = true;
         modalTitle.textContent = "✏️ メモを編集";
-        // 現在表示されているテキストを入力欄に移す
         memoText.value = viewText.textContent === "（メモはありません）" ? "" : viewText.textContent;
-        photoInputGroup.style.display = 'none'; // 簡易化のため編集時はテキストのみ（写真は据え置き）
-        
-        viewBox.style.display = 'none'; // 詳細画面を閉じて
-        memoBox.style.display = 'block'; // 編集画面を開く
+        photoInputGroup.style.display = 'none';
+        viewBox.style.display = 'none';
+        memoBox.style.display = 'block';
     });
 
-    // ★【新機能】削除ボタンを押したとき（deleteDoc）
     deleteBtn.addEventListener('click', async () => {
-        if (confirm("このピンを削除してもよろしいですか？\nこの操作は元に戻せません。")) {
-            const pinDocRef = doc(db, "pins", selectedPinId);
-            await deleteDoc(pinDocRef);
-            closeModal();
+        if (confirm("このピンを削除してもよろしいですか？")) {
+            try {
+                const pinDocRef = doc(db, "pins", selectedPinId);
+                await deleteDoc(pinDocRef);
+                closeModal();
+            } catch (error) {
+                alert("削除エラーが発生しました:\n" + error.message);
+            }
         }
     });
 
-    cancelBtn.addEventListener
+    cancelBtn.addEventListener('click', closeModal);
+    closeViewBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', closeModal);
+    
+    function closeModal() {
+        memoBox.style.display = 'none';
+        viewBox.style.display = 'none';
+        overlay.style.display = 'none';
+    }
+</script>
+</body>
+</html>
