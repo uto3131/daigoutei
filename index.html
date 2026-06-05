@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図共有アプリ（最終検証版）</title>
+    <title>見取り図共有アプリ（高機能版）</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -12,6 +12,12 @@
         .container { max-width: 1100px; margin: 0 auto; }
         h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.5px; }
         p.subtitle { color: #86868b; margin-top: 0; margin-bottom: 20px; font-size: 13px; }
+        
+        /* 閲覧専用モード用の案内バナー */
+        #view-only-banner {
+            display: none; background: #e3f2fd; color: #0d47a1; padding: 10px 16px;
+            border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 15px; border: 1px solid #bbdefb;
+        }
         
         .app-layout { display: flex; flex-direction: column; gap: 20px; }
         @media (min-width: 768px) {
@@ -43,22 +49,18 @@
         #controls {
             background: #ffffff; padding: 16px; border-radius: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px;
-            display: flex; flex-direction: column; gap: 8px;
+            display: flex; flex-direction: column; gap: 12px;
         }
         
-        /* 🛠️ ボタンの構造を限界までシンプルに修正 */
-        .direct-file-input {
-            font-size: 16px; padding: 8px; width: 100%; max-width: 300px;
-        }
+        .direct-file-input { font-size: 16px; padding: 8px; width: 100%; max-width: 300px; }
         
         #map-container {
             position: relative; display: inline-block; background-color: #ffffff;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); overflow: hidden;
             max-width: 100%; border: 1px solid rgba(0,0,0,0.05); min-width: 100%; min-height: 200px;
+            user-select: none; -webkit-user-select: none;
         }
-        @media (min-width: 768px) {
-            #map-container { min-width: 320px; }
-        }
+        @media (min-width: 768px) { #map-container { min-width: 320px; } }
         #blueprint { display: block; max-width: 100%; height: auto; width: 100%; }
         
         #no-image-placeholder {
@@ -67,11 +69,13 @@
         }
         
         .pin {
-            position: absolute; width: 22px; height: 22px;
+            position: absolute; width: 24px; height: 24px;
             border: 2.5px solid #ffffff; border-radius: 50%; transform: translate(-50%, -50%);
-            cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.25);
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10;
+            cursor: grab; box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+            transition: transform 0.1s ease; z-index: 10;
+            touch-action: none; /* スマホでのドラッグをスムーズにするおまじない */
         }
+        .pin:active { cursor: grabbing; transform: translate(-50%, -50%) scale(1.3); z-index: 100; }
         
         .modal {
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -106,19 +110,34 @@
         .input-group { margin-bottom: 16px; }
         .input-group label { display: block; font-size: 13px; font-weight: 600; color: #6e6e73; margin-bottom: 6px; }
         .date-info { font-size: 11px; color: #86868b; margin-top: 12px; line-height: 1.4; border-top: 1px solid #e8e8ed; padding-top: 8px; }
-        .category-tag { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; color: white; margin-bottom: 8px; display: inline-block;}
+        
+        /* タイトル文字を消して、タグ自体をすっきり美しく見せるスタイルに変更 */
+        .category-tag { font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 6px; color: white; margin-bottom: 14px; display: inline-block;}
+        
+        .share-link-box {
+            background: #f5f5f7; padding: 10px; border-radius: 8px; border: 1px solid #d2d2d7;
+            font-size: 12px; word-break: break-all; margin-top: 5px; user-select: all;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>🗺 見取り図ピン留めアプリ</h1>
-    <p class="subtitle">ピンの追加・色の名前変更がリアルタイムに全員の画面へ同期されます。</p>
+    <p class="subtitle">ピンの追加・移動・色の名前変更がリアルタイムに全員の画面へ同期されます。</p>
+    
+    <div id="view-only-banner">🔒 現在「閲覧専用（書き込み禁止）モード」で開いています。</div>
     
     <div id="controls">
-        <strong style="font-size: 14px; color: #1d1d1f;">📸 見取り図をアップロード:</strong>
-        <input type="file" id="file-input" class="direct-file-input" accept="image/*">
-        <span id="upload-status" style="font-size:13px; color:#0071e3; font-weight: 600; margin-top: 4px;"></span>
+        <div id="upload-area">
+            <strong style="font-size: 14px; color: #1d1d1f;">📸 見取り図をアップロード:</strong><br>
+            <input type="file" id="file-input" class="direct-file-input" accept="image/*">
+            <span id="upload-status" style="font-size:13px; color:#0071e3; font-weight: 600; margin-top: 4px;"></span>
+        </div>
+        <div id="share-area">
+            <button class="btn" id="gen-view-btn" style="background: #34c759; font-size: 12px; padding: 6px 12px;">🔗 閲覧専用リンクを発行する</button>
+            <div id="share-url-result" class="share-link-box" style="display:none;"></div>
+        </div>
     </div>
 
     <div class="app-layout">
@@ -129,7 +148,7 @@
             </div>
         </div>
         
-        <div class="config-panel">
+        <div class="config-panel" id="config-panel-area">
             <h3>🎨 ピンの色と名前の設定</h3>
             <div class="label-group">
                 <div class="color-dot" style="background:#ff3b30;"></div>
@@ -181,11 +200,10 @@
 
 <div id="view-box" class="modal">
     <div id="view-tag" class="category-tag">カテゴリー</div>
-    <h3>📌 クラウドの記録内容</h3>
-    <p id="view-text" style="white-space: pre-wrap; font-size: 15px; line-height: 1.5; margin: 0; margin-bottom:10px;"></p>
+    <p id="view-text" style="white-space: pre-wrap; font-size: 16px; line-height: 1.5; margin: 0; margin-bottom:10px; color:#1d1d1f; font-weight:500;"></p>
     <img id="view-photo" src="" alt="添付写真">
     <div class="date-info" id="view-dates"></div>
-    <div class="modal-buttons">
+    <div class="modal-buttons" id="view-modal-actions">
         <button class="btn btn-danger" id="delete-btn">削除</button>
         <button class="btn" id="edit-btn" style="background:#0071e3;">編集</button>
         <button class="btn btn-cancel" id="close-view-btn">閉じる</button>
@@ -197,7 +215,7 @@
     import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // ⚠️【コピペエリア】あなたのFirebaseの鍵を貼り付けてください。
-    const firebaseConfig = {
+   const firebaseConfig = {
   apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
   authDomain: "daigoutei-191b2.firebaseapp.com",
   projectId: "daigoutei-191b2",
@@ -205,6 +223,31 @@
   messagingSenderId: "724185590715",
   appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
 };
+
+    // 🔗 URLパラメータを解析して「閲覧専用モード」かチェック
+    const urlParams = new URLSearchParams(window.location.search);
+    const isViewOnly = urlParams.get('mode') === 'view';
+
+    // 閲覧専用モードなら、ボタンや設定用UIを非表示にする
+    if (isViewOnly) {
+        document.getElementById('view-only-banner').style.display = 'block';
+        document.getElementById('upload-area').style.display = 'none';
+        document.getElementById('share-area').style.display = 'none';
+        document.getElementById('config-panel-area').style.display = 'none';
+        document.getElementById('view-modal-actions').querySelectorAll('button').forEach(btn => {
+            if(btn.id !== 'close-view-btn') btn.style.display = 'none';
+        });
+    }
+
+    // 🔗 閲覧専用リンク生成処理
+    document.getElementById('gen-view-btn').addEventListener('click', () => {
+        const baseUrl = window.location.href.split('?')[0];
+        const viewUrl = `${baseUrl}?mode=view`;
+        const resultBox = document.getElementById('share-url-result');
+        resultBox.textContent = viewUrl;
+        resultBox.style.display = 'block';
+        alert("閲覧専用のURLを発行しました！ボックス内のURLをコピーして共有してください。");
+    });
 
     let db; let pinsCollection; let imageDocRef; let labelsDocRef;
     try {
@@ -214,7 +257,7 @@
         imageDocRef = doc(db, "settings", "blueprintImage");
         labelsDocRef = doc(db, "settings", "colorLabels");
     } catch (e) {
-        alert("Firebaseの初期化に致命的なエラーが発生しました:\n" + e.message);
+        alert("Firebaseの初期化に失敗しました。");
     }
 
     const fileInput = document.getElementById('file-input');
@@ -279,39 +322,25 @@
                     const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
                     resolve(canvas.toDataURL('image/jpeg', quality));
                 };
-                img.onerror = e => reject(new Error("画像の読み込みに失敗しました。"));
             };
-            reader.onerror = e => reject(new Error("ファイルの読み取りに失敗しました。"));
         });
     }
 
-    // 🚨【最終兵器】何が起きても必ずエラーをアラート通知するアップロード処理
     if (fileInput) {
         fileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
-            if (!file) {
-                alert("ファイルが選択されていません。");
-                return;
-            }
-            
+            if (!file) return;
             uploadStatus.textContent = "⏳ 画像処理中...";
-            
             try {
-                // 無料枠で絶対にエラーが出ないようにさらに超軽量化 (500x500画素)
-                const compressedBase64 = await compressImage(file, 500, 500, 0.5);
+                const compressedBase64 = await compressImage(file, 600, 600, 0.5);
                 uploadStatus.textContent = "⏳ クラウドへ同期中...";
-                
                 await setDoc(imageDocRef, { base64: compressedBase64 });
                 uploadStatus.textContent = "✅ 同期完了しました！";
-                
             } catch (error) {
-                // 画面に強制的にポップアップエラーを出す
-                alert("【エラー発生】保存できませんでした！理由:\n" + error.message + "\n\n※Firebaseのルール設定、またはログイン状態を確認してください。");
-                uploadStatus.textContent = "❌ 失敗: " + error.message;
+                alert("アップロード失敗: " + error.message);
+                uploadStatus.textContent = "❌ 失敗";
             }
         });
-    } else {
-        alert("プログラムエラー: HTMLのファイル選択ボタンが見つかりません。");
     }
 
     // 色ラベル同期
@@ -323,25 +352,27 @@
             colorMap["#ffcc00"] = labelYellow.value = optYellow.textContent = data.yellow || "保留";
             colorMap["#34c759"] = labelGreen.value = optGreen.textContent = data.green || "その他";
         }
-    }, (err) => { console.log("ラベル初期化待ち"); });
-
-    saveLabelsBtn.addEventListener('click', async () => {
-        try {
-            await setDoc(labelsDocRef, {
-                red: labelRed.value, blue: labelBlue.value, yellow: labelYellow.value, green: labelGreen.value
-            });
-            alert("色の名前を全員に同期しました！");
-        } catch (e) { alert("同期失敗: " + e.message); }
     });
 
-    // 見取り図リアルタイム同期
+    if (saveLabelsBtn) {
+        saveLabelsBtn.addEventListener('click', async () => {
+            try {
+                await setDoc(labelsDocRef, {
+                    red: labelRed.value, blue: labelBlue.value, yellow: labelYellow.value, green: labelGreen.value
+                });
+                alert("色の名前を全員に同期しました！");
+            } catch (e) { alert("同期失敗: " + e.message); }
+        });
+    }
+
+    // 見取り図同期
     onSnapshot(imageDocRef, (docSnap) => {
         if (docSnap.exists() && docSnap.data().base64) {
             blueprint.src = docSnap.data().base64;
             blueprint.style.display = 'block';
             placeholder.style.display = 'none';
         }
-    }, (err) => { console.log("画像データ読み込み待機中..."); });
+    });
 
     pinPhotoInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
@@ -349,6 +380,7 @@
     });
 
     container.addEventListener('click', (e) => {
+        if (isViewOnly) return; // 閲覧専用なら追加不可
         if (e.target === blueprint || e.target === container) {
             const rect = container.getBoundingClientRect();
             currentCoords.x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -380,61 +412,13 @@
         } catch (error) { alert("保存エラー: " + error.message); }
     });
 
-    onSnapshot(pinsCollection, (snapshot) => {
-        document.querySelectorAll('.pin').forEach(pin => pin.remove());
-        snapshot.forEach((docSnap) => {
-            const pinData = docSnap.data();
-            const pinId = docSnap.id;
-            
-            const pin = document.createElement('div');
-            pin.className = 'pin';
-            pin.style.left = pinData.x + '%';
-            pin.style.top = pinData.y + '%';
-            
-            const pinColor = pinData.color || "#ff3b30";
-            pin.style.backgroundColor = pinColor;
+    // 📌 ピンのドラッグ＆ドロップ（位置移動）処理の実装
+    let draggedPinId = null;
 
-            pin.addEventListener('click', (e) => {
-                e.stopPropagation();
-                selectedPinId = pinId;
-                viewText.textContent = pinData.note || "（メモはありません）";
-                if (pinData.photo) {
-                    viewPhoto.src = pinData.photo; viewPhoto.style.display = 'block';
-                } else { viewPhoto.style.display = 'none'; }
-                
-                viewTag.style.backgroundColor = pinColor;
-                viewTag.textContent = colorMap[pinColor] || "カテゴリー";
+    function setupPinDrag(pin, pinId) {
+        if (isViewOnly) return; // 閲覧専用モードなら移動不可
 
-                viewDates.innerHTML = `作成日: ${formatDate(pinData.createdAt)}<br>最終編集: ${formatDate(pinData.updatedAt)}`;
-                viewBox.style.display = 'block'; overlay.style.display = 'block';
-            });
-            container.appendChild(pin);
-        });
-    }, (err) => { console.log("ピンデータ読み込み待機中..."); });
-
-    editBtn.addEventListener('click', () => {
-        isEditing = true;
-        modalTitle.textContent = "✏️ メモを編集";
-        memoText.value = viewText.textContent === "（メモはありません）" ? "" : viewText.textContent;
-        photoInputGroup.style.display = 'none';
-        colorSelectGroup.style.display = 'none';
-        viewBox.style.display = 'none'; memoBox.style.display = 'block';
-    });
-
-    deleteBtn.addEventListener('click', async () => {
-        if (confirm("このピンを削除してもよろしいですか？")) {
-            const pinDocRef = doc(db, "pins", selectedPinId);
-            await deleteDoc(pinDocRef); closeModal();
-        }
-    });
-
-    cancelBtn.addEventListener('click', closeModal);
-    closeViewBtn.addEventListener('click', closeModal);
-    overlay.addEventListener('click', closeModal);
-    
-    function closeModal() {
-        memoBox.style.display = 'none'; viewBox.style.display = 'none'; overlay.style.display = 'none';
-    }
-</script>
-</body>
-</html>
+        const startDrag = (e) => {
+            draggedPinId = pinId;
+            e.preventDefault();
+        };
