@@ -100,9 +100,17 @@
             font-size: 12px; word-break: break-all; margin-top: 5px; user-select: all;
         }
 
-        /* メモ内画像用スタイル */
         .modal-image-input { font-size: 13px; margin-bottom: 10px; display: block; }
         .preview-thumb { max-width: 100%; max-height: 120px; border-radius: 6px; display: none; margin-bottom: 10px; border: 1px solid #d2d2d7; }
+
+        /* カラーセレクターのスタイル */
+        .color-selector { display: flex; gap: 12px; margin-bottom: 15px; margin-top: 5px; }
+        .color-option {
+            width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; box-sizing: border-box; transition: transform 0.1s ease;
+        }
+        .color-option:hover { transform: scale(1.1); }
+        .color-option.selected { border-color: #000000; box-shadow: 0 0 4px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
@@ -146,6 +154,17 @@
 
 <div id="memo-box" class="modal">
     <h3>📌 情報をクラウドに記録</h3>
+    
+    <div id="modal-color-section">
+        <strong style="font-size: 13px;">🎨 ピンの色を選択:</strong>
+        <div class="color-selector">
+            <div class="color-option selected" data-color="#ff3b30" style="background: #ff3b30;"></div>
+            <div class="color-option" data-color="#007aff" style="background: #007aff;"></div>
+            <div class="color-option" data-color="#ffcc00" style="background: #ffcc00;"></div>
+            <div class="color-option" data-color="#34c759" style="background: #34c759;"></div>
+        </div>
+    </div>
+
     <textarea id="memo-text" placeholder="ここにメモを入力..."></textarea>
     
     <div id="modal-upload-section">
@@ -181,6 +200,7 @@
         document.getElementById('upload-area').style.display = 'none';
         document.getElementById('share-area').style.display = 'none';
         document.getElementById('modal-upload-section').style.display = 'none';
+        document.getElementById('modal-color-section').style.display = 'none';
     }
 
     document.getElementById('gen-view-btn').addEventListener('click', () => {
@@ -209,7 +229,17 @@
     const cancelBtn = document.getElementById('cancel-btn');
 
     let tempX = 0; let tempY = 0;
-    let base64PinImage = ""; // 添付写真用のデータ保持
+    let base64PinImage = "";
+    let selectedColor = "#ff3b30"; // デフォルトは赤
+
+    // 色選択ボタンのクリックイベント設定
+    document.querySelectorAll('.color-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+            document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
+            e.target.classList.add('selected');
+            selectedColor = e.target.getAttribute('data-color');
+        });
+    });
 
     // 1. 見取り図画像の読み込み
     try {
@@ -231,105 +261,4 @@
             reader.onload = async (event) => {
                 try {
                     await setDoc(blueprintDocRef, { base64: event.target.result });
-                } catch (error) { console.error(error); }
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-
-    // メモ内画像のプレビュー処理
-    if (pinImageInput) {
-        pinImageInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                base64PinImage = event.target.result;
-                pinImagePreview.src = base64PinImage;
-                pinImagePreview.style.display = "block";
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-
-    // 3. マップクリックでモーダルを開く
-    container.addEventListener('click', (e) => {
-        if (isViewOnly) return;
-        if (e.target === blueprint || e.target === container) {
-            const rect = container.getBoundingClientRect();
-            tempX = ((e.clientX - rect.left) / rect.width) * 100;
-            tempY = ((e.clientY - rect.top) / rect.height) * 100;
-
-            memoText.value = '';
-            base64PinImage = "";
-            pinImagePreview.src = "";
-            pinImagePreview.style.display = "none";
-            if (pinImageInput) pinImageInput.value = "";
-            
-            memoBox.style.display = 'block';
-            overlay.style.display = 'block';
-        }
-    });
-
-    // 4. ピンと写真をFirestoreに保存
-    saveBtn.addEventListener('click', async () => {
-        if (memoText.value.trim() === "" && !base64PinImage) return;
-        try {
-            await addDoc(pinsCollection, {
-                x: tempX,
-                y: tempY,
-                note: memoText.value,
-                pinImage: base64PinImage, // 画像を一緒に保存
-                createdAt: new Date().getTime()
-            });
-            closeModal();
-        } catch(err) { console.error("ピン保存エラー:", err); }
-    });
-
-    // 5. ピンのリアルタイム同期・表示
-    try {
-        onSnapshot(pinsCollection, (snapshot) => {
-            document.querySelectorAll('.pin').forEach(p => p.remove());
-            snapshot.forEach(docSnap => {
-                const data = docSnap.data();
-                const pin = document.createElement('div');
-                pin.className = 'pin';
-                pin.style.left = data.x + '%';
-                pin.style.top = data.y + '%';
-                pin.style.backgroundColor = '#ff3b30';
-
-                pin.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    
-                    // アラートの代わりに詳細が分かるように処理
-                    let message = `📌 メモ内容:\n${data.note || "メモはありません"}`;
-                    if (data.pinImage) {
-                        // 写真がある場合は、簡易的な確認用Windowかアラートで
-                        // 今回はダイレクトに写真も確認できるよう別タブ表示かポップアップ形式に耐えうるアラートで表現
-                        const imgWindow = window.open("");
-                        imgWindow.document.write(`
-                            <body style="margin:0; background:#f5f5f7; font-family:sans-serif; text-align:center; padding:20px;">
-                                <h3>📌 ピンの記録内容</h3>
-                                <p style="font-size:16px; max-width:500px; margin:20px auto; white-space:pre-wrap;">${data.note || ""}</p>
-                                <img src="${data.pinImage}" style="max-width:90%; max-height:70vh; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
-                            </body>
-                        `);
-                    } else {
-                        alert(message);
-                    }
-                });
-
-                container.appendChild(pin);
-            });
-        });
-    } catch(e) { console.error(e); }
-
-    cancelBtn.addEventListener('click', closeModal);
-    overlay.addEventListener('click', closeModal);
-    function closeModal() {
-        memoBox.style.display = 'none';
-        overlay.style.display = 'none';
-    }
-</script>
-</body>
-</html>
+                } catch (error) { console.error
