@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>見取り図共有アプリ</title>
+    <title>見取り図ピン留めアプリ</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -81,7 +81,7 @@
         .modal h3 { margin-top: 0; font-size: 18px; font-weight: 600; margin-bottom: 14px; }
         .modal textarea {
             width: 100%; height: 90px; padding: 10px; border-radius: 8px; border: 1px solid #d2d2d7;
-            font-size: 14px; box-sizing: border-box; background: #f5f5f7; resize: none; outline: none;
+            font-size: 14px; box-sizing: border-box; background: #f5f5f7; resize: none; outline: none; margin-bottom: 10px;
         }
         
         #overlay {
@@ -99,13 +99,17 @@
             background: #f5f5f7; padding: 10px; border-radius: 8px; border: 1px solid #d2d2d7;
             font-size: 12px; word-break: break-all; margin-top: 5px; user-select: all;
         }
+
+        /* メモ内画像用スタイル */
+        .modal-image-input { font-size: 13px; margin-bottom: 10px; display: block; }
+        .preview-thumb { max-width: 100%; max-height: 120px; border-radius: 6px; display: none; margin-bottom: 10px; border: 1px solid #d2d2d7; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>🗺 見取り図ピン留めアプリ</h1>
-    <p class="subtitle">ピンの追加・メモの登録がリアルタイムに全員の画面へ同期されます。</p>
+    <p class="subtitle">ピンの追加・メモ・写真の登録がリアルタイムに全員の画面へ同期されます。</p>
     
     <div id="view-only-banner">🔒 現在「閲覧専用（書き込み禁止）モード」で開いています。</div>
     
@@ -143,6 +147,13 @@
 <div id="memo-box" class="modal">
     <h3>📌 情報をクラウドに記録</h3>
     <textarea id="memo-text" placeholder="ここにメモを入力..."></textarea>
+    
+    <div id="modal-upload-section">
+        <strong style="font-size: 13px;">🖼 写真を追加 (任意):</strong>
+        <input type="file" id="pin-image-input" class="modal-image-input" accept="image/*">
+        <img id="pin-image-preview" class="preview-thumb" alt="プレビュー">
+    </div>
+
     <div class="modal-buttons">
         <button class="btn" id="save-btn">保存</button>
         <button class="btn btn-cancel" id="cancel-btn">キャンセル</button>
@@ -162,7 +173,6 @@
         appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
     };
 
-    // モード判定 (?mode=view があるか)
     const urlParams = new URLSearchParams(window.location.search);
     const isViewOnly = urlParams.get('mode') === 'view';
 
@@ -170,9 +180,9 @@
         document.getElementById('view-only-banner').style.display = 'block';
         document.getElementById('upload-area').style.display = 'none';
         document.getElementById('share-area').style.display = 'none';
+        document.getElementById('modal-upload-section').style.display = 'none';
     }
 
-    // 閲覧専用リンクの発行
     document.getElementById('gen-view-btn').addEventListener('click', () => {
         const baseUrl = window.location.href.split('?')[0];
         const viewUrl = `${baseUrl}?mode=view`;
@@ -181,7 +191,6 @@
         resultBox.style.display = 'block';
     });
 
-    // Firebase 初期化
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const blueprintDocRef = doc(db, "settings", "blueprintImage");
@@ -194,12 +203,15 @@
     const memoBox = document.getElementById('memo-box');
     const overlay = document.getElementById('overlay');
     const memoText = document.getElementById('memo-text');
+    const pinImageInput = document.getElementById('pin-image-input');
+    const pinImagePreview = document.getElementById('pin-image-preview');
     const saveBtn = document.getElementById('save-btn');
     const cancelBtn = document.getElementById('cancel-btn');
 
     let tempX = 0; let tempY = 0;
+    let base64PinImage = ""; // 添付写真用のデータ保持
 
-    // 1. 見取り図画像の読み込み (ガード付き)
+    // 1. 見取り図画像の読み込み
     try {
         onSnapshot(blueprintDocRef, (docSnap) => {
             if (docSnap.exists() && docSnap.data().base64) {
@@ -207,7 +219,7 @@
                 blueprint.style.display = 'block';
                 placeholder.style.display = 'none';
             }
-        }, (err) => { console.log("画像取得制限ガード:", err); });
+        });
     } catch(e) { console.error(e); }
 
     // 2. 見取り図画像のアップロード
@@ -219,41 +231,62 @@
             reader.onload = async (event) => {
                 try {
                     await setDoc(blueprintDocRef, { base64: event.target.result });
-                } catch (error) { console.error("画像アップロード失敗:", error); }
+                } catch (error) { console.error(error); }
             };
             reader.readAsDataURL(file);
         });
     }
 
-    // 3. マップクリックでメモ入力モーダルを開く
+    // メモ内画像のプレビュー処理
+    if (pinImageInput) {
+        pinImageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                base64PinImage = event.target.result;
+                pinImagePreview.src = base64PinImage;
+                pinImagePreview.style.display = "block";
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // 3. マップクリックでモーダルを開く
     container.addEventListener('click', (e) => {
-        if (isViewOnly) return; // 閲覧専用モードならクリック無効
+        if (isViewOnly) return;
         if (e.target === blueprint || e.target === container) {
             const rect = container.getBoundingClientRect();
             tempX = ((e.clientX - rect.left) / rect.width) * 100;
             tempY = ((e.clientY - rect.top) / rect.height) * 100;
 
             memoText.value = '';
+            base64PinImage = "";
+            pinImagePreview.src = "";
+            pinImagePreview.style.display = "none";
+            if (pinImageInput) pinImageInput.value = "";
+            
             memoBox.style.display = 'block';
             overlay.style.display = 'block';
         }
     });
 
-    // 4. メモを保存（ピンをFirestoreに保存）
+    // 4. ピンと写真をFirestoreに保存
     saveBtn.addEventListener('click', async () => {
-        if (memoText.value.trim() === "") return;
+        if (memoText.value.trim() === "" && !base64PinImage) return;
         try {
             await addDoc(pinsCollection, {
                 x: tempX,
                 y: tempY,
                 note: memoText.value,
+                pinImage: base64PinImage, // 画像を一緒に保存
                 createdAt: new Date().getTime()
             });
             closeModal();
         } catch(err) { console.error("ピン保存エラー:", err); }
     });
 
-    // 5. ピンのリアルタイム同期・表示 (ガード付き)
+    // 5. ピンのリアルタイム同期・表示
     try {
         onSnapshot(pinsCollection, (snapshot) => {
             document.querySelectorAll('.pin').forEach(p => p.remove());
@@ -263,16 +296,32 @@
                 pin.className = 'pin';
                 pin.style.left = data.x + '%';
                 pin.style.top = data.y + '%';
-                pin.style.backgroundColor = '#ff3b30'; // 標準の赤色
+                pin.style.backgroundColor = '#ff3b30';
 
                 pin.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    alert(`📌 メモ内容:\n${data.note || "メモはありません"}`);
+                    
+                    // アラートの代わりに詳細が分かるように処理
+                    let message = `📌 メモ内容:\n${data.note || "メモはありません"}`;
+                    if (data.pinImage) {
+                        // 写真がある場合は、簡易的な確認用Windowかアラートで
+                        // 今回はダイレクトに写真も確認できるよう別タブ表示かポップアップ形式に耐えうるアラートで表現
+                        const imgWindow = window.open("");
+                        imgWindow.document.write(`
+                            <body style="margin:0; background:#f5f5f7; font-family:sans-serif; text-align:center; padding:20px;">
+                                <h3>📌 ピンの記録内容</h3>
+                                <p style="font-size:16px; max-width:500px; margin:20px auto; white-space:pre-wrap;">${data.note || ""}</p>
+                                <img src="${data.pinImage}" style="max-width:90%; max-height:70vh; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+                            </body>
+                        `);
+                    } else {
+                        alert(message);
+                    }
                 });
 
                 container.appendChild(pin);
             });
-        }, (err) => { console.log("ピン同期制限ガード:", err); });
+        });
     } catch(e) { console.error(e); }
 
     cancelBtn.addEventListener('click', closeModal);
