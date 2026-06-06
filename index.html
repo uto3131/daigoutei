@@ -49,8 +49,6 @@
             display: flex; flex-direction: column; gap: 12px;
         }
         
-        .direct-file-input { font-size: 16px; padding: 8px; width: 100%; max-width: 300px; }
-        
         #map-container {
             position: relative; display: inline-block; background-color: #ffffff;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); overflow: hidden;
@@ -59,11 +57,6 @@
         }
         @media (min-width: 768px) { #map-container { min-width: 320px; } }
         #blueprint { display: block; max-width: 100%; height: auto; width: 100%; }
-        
-        #no-image-placeholder {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; color: #86868b; font-size: 14px; width: 90%; pointer-events: none;
-        }
         
         .pin {
             position: absolute; width: 24px; height: 24px;
@@ -111,7 +104,7 @@
         .color-option:hover { transform: scale(1.1); }
         .color-option.selected { border-color: #000000; box-shadow: 0 0 4px rgba(0,0,0,0.3); }
 
-        /* スマートな詳細閲覧用モーダルのスタイル */
+        /* 詳細閲覧用モーダルのスタイル */
         #view-box { max-width: 380px; }
         .view-tag {
             display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px;
@@ -133,13 +126,9 @@
     <h1>🗺 見取り図ピン留めアプリ</h1>
     <p class="subtitle">ピンの追加・メモ・写真の登録がリアルタイムに全員の画面へ同期されます。</p>
     
-    <div id="view-only-banner">🔒 現在「閲覧専用（書き込み禁止）モード」で開いているか、データがありません。</div>
+    <div id="view-only-banner">🔒 現在「閲覧専用（書き込み禁止）モード」で開いています。</div>
     
     <div id="controls">
-        <div id="upload-area">
-            <strong style="font-size: 14px; color: #1d1d1f;">📸 見取り図をアップロード:</strong><br>
-            <input type="file" id="file-input" class="direct-file-input" accept="image/*">
-        </div>
         <div id="share-area">
             <button class="btn" id="gen-view-btn" style="background: #34c759; font-size: 12px; padding: 6px 12px;">🔗 閲覧専用リンクを発行する</button>
             <div id="share-url-result" class="share-link-box" style="display:none;"></div>
@@ -149,8 +138,7 @@
     <div class="app-layout">
         <div class="main-area">
             <div id="map-container">
-                <div id="no-image-placeholder">ここに選択した見取り図が表示されます</div>
-                <img id="blueprint" src="" alt="見取り図" style="display:none;">
+                <img id="blueprint" src="blueprint.jpg" alt="見取り図">
             </div>
         </div>
         
@@ -204,7 +192,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
@@ -220,7 +208,6 @@
 
     if (isViewOnly) {
         document.getElementById('view-only-banner').style.display = 'block';
-        document.getElementById('upload-area').style.display = 'none';
         document.getElementById('share-area').style.display = 'none';
         document.getElementById('modal-upload-section').style.display = 'none';
         document.getElementById('modal-color-section').style.display = 'none';
@@ -236,3 +223,167 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const pinsCollection = collection(db, "pins");
+
+    const blueprint = document.getElementById('blueprint');
+    const container = document.getElementById('map-container');
+    const memoBox = document.getElementById('memo-box');
+    const overlay = document.getElementById('overlay');
+    const memoText = document.getElementById('memo-text');
+    const pinImageInput = document.getElementById('pin-image-input');
+    const pinImagePreview = document.getElementById('pin-image-preview');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+
+    const viewBox = document.getElementById('view-box');
+    const viewTagEl = document.getElementById('view-tag-el');
+    const viewNoteEl = document.getElementById('view-note-el');
+    const viewPhotoEl = document.getElementById('view-photo-el');
+    const viewCloseBtn = document.getElementById('view-close-btn');
+
+    const colorLabelMap = {
+        "#ff3b30": "要補修",
+        "#007aff": "確認済み",
+        "#ffcc00": "保留",
+        "#34c759": "その他"
+    };
+
+    let tempX = 0; let tempY = 0;
+    let base64PinImage = "";
+    let selectedColor = "#ff3b30";
+
+    document.querySelectorAll('.color-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+            document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
+            e.target.classList.add('selected');
+            selectedColor = e.target.getAttribute('data-color');
+        });
+    });
+
+    // 📸 ピン内写真を軽量化圧縮する処理
+    function compressImage(file, maxWidth, maxHeight, quality) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
+                    } else {
+                        if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
+                    }
+
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+            };
+            reader.onerror = error => reject(error);
+        });
+    }
+
+    if (pinImageInput) {
+        pinImageInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                base64PinImage = await compressImage(file, 600, 600, 0.6);
+                pinImagePreview.src = base64PinImage;
+                pinImagePreview.style.display = "block";
+            } catch (error) { console.error(error); }
+        });
+    }
+
+    container.addEventListener('click', (e) => {
+        if (isViewOnly) return;
+        if (e.target === blueprint || e.target === container) {
+            const rect = container.getBoundingClientRect();
+            tempX = ((e.clientX - rect.left) / rect.width) * 100;
+            tempY = ((e.clientY - rect.top) / rect.height) * 100;
+
+            memoText.value = '';
+            base64PinImage = "";
+            pinImagePreview.src = "";
+            pinImagePreview.style.display = "none";
+            if (pinImageInput) pinImageInput.value = "";
+            
+            selectedColor = "#ff3b30";
+            document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
+            const defaultOpt = document.querySelector('.color-option[data-color="#ff3b30"]');
+            if (defaultOpt) defaultOpt.classList.add('selected');
+
+            memoBox.style.display = 'block';
+            overlay.style.display = 'block';
+        }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+        if (memoText.value.trim() === "" && !base64PinImage) return;
+        try {
+            await addDoc(pinsCollection, {
+                x: tempX,
+                y: tempY,
+                note: memoText.value,
+                pinImage: base64PinImage,
+                color: selectedColor,
+                createdAt: new Date().getTime()
+            });
+            closeModal();
+        } catch(err) { console.error("ピン保存エラー:", err); }
+    });
+
+    try {
+        onSnapshot(pinsCollection, (snapshot) => {
+            document.querySelectorAll('.pin').forEach(p => p.remove());
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                const pin = document.createElement('div');
+                pin.className = 'pin';
+                pin.style.left = data.x + '%';
+                pin.style.top = data.y + '%';
+                pin.style.backgroundColor = data.color || '#ff3b30'; 
+
+                pin.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    const pColor = data.color || '#ff3b30';
+                    viewTagEl.textContent = colorLabelMap[pColor] || "未設定";
+                    viewTagEl.style.backgroundColor = pColor;
+                    viewNoteEl.textContent = data.note || "メモはありません";
+
+                    if (data.pinImage) {
+                        viewPhotoEl.src = data.pinImage;
+                        viewPhotoEl.style.display = "block";
+                    } else {
+                        viewPhotoEl.src = "";
+                        viewPhotoEl.style.display = "none";
+                    }
+
+                    viewBox.style.display = 'block';
+                    overlay.style.display = 'block';
+                });
+
+                container.appendChild(pin);
+            });
+        }, (err) => { console.log("ピン同期エラー:", err); });
+    } catch(e) { console.error(e); }
+
+    cancelBtn.addEventListener('click', closeModal);
+    viewCloseBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', closeModal);
+    
+    function closeModal() {
+        memoBox.style.display = 'none';
+        viewBox.style.display = 'none';
+        overlay.style.display = 'none';
+    }
+</script>
+</body>
+</html>
