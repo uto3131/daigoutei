@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <title>見取り図ピン留めアプリ</title>
     <style>
-        #map-container { position: relative; display: inline-block; }
-        .pin { position: absolute; width: 20px; height: 20px; background: red; border-radius: 50%; cursor: pointer; }
+        #map-container { position: relative; display: inline-block; cursor: crosshair; }
+        .pin { position: absolute; width: 20px; height: 20px; background: red; border-radius: 50%; cursor: pointer; transform: translate(-50%, -50%); }
+        #memo-box { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 1px solid #ccc; z-index: 100; }
     </style>
 </head>
 <body>
@@ -15,17 +16,19 @@
         <img id="blueprint" style="max-width:800px; display:none;">
     </div>
 
+    <div id="memo-box">
+        <textarea id="memo-text" placeholder="メモを入力"></textarea><br>
+        <button id="save-btn">保存</button>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
-            authDomain: "daigoutei-191b2.firebaseapp.com",
             projectId: "daigoutei-191b2",
-            storageBucket: "daigoutei-191b2.firebasestorage.app",
-            messagingSenderId: "724185590715",
-            appId: "1:724185590715:web:b1f3d5fa14a46c9423f29e"
+            // 他の項目もそのまま残してください
         };
 
         const app = initializeApp(firebaseConfig);
@@ -33,34 +36,39 @@
         const blueprintDocRef = doc(db, "settings", "blueprintImage");
         const pinsCollection = collection(db, "pins");
 
-        // 1. 画像表示
+        let tempX, tempY;
+
+        // 1. 画像表示と保存
         onSnapshot(blueprintDocRef, (docSnap) => {
             const img = document.getElementById('blueprint');
-            if (docSnap.exists()) {
-                img.src = docSnap.data().base64;
-                img.style.display = 'block';
-            }
+            if (docSnap.exists()) { img.src = docSnap.data().base64; img.style.display = 'block'; }
         });
 
-        // 2. 画像保存
         document.getElementById('file-input').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             const reader = new FileReader();
-            reader.onload = async (ev) => {
-                await setDoc(blueprintDocRef, { base64: ev.target.result });
-            };
+            reader.onload = async (ev) => { await setDoc(blueprintDocRef, { base64: ev.target.result }); };
             reader.readAsDataURL(file);
         });
 
-        // 3. ピンの表示と追加（クリック位置にピンを出す）
+        // 2. ピンのクリックでメモ画面を表示
         const container = document.getElementById('map-container');
-        container.addEventListener('click', async (e) => {
+        container.addEventListener('click', (e) => {
             const rect = container.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width) * 100;
-            const y = ((e.clientY - rect.top) / rect.height) * 100;
-            await addDoc(pinsCollection, { x, y });
+            tempX = ((e.clientX - rect.left) / rect.width) * 100;
+            tempY = ((e.clientY - rect.top) / rect.height) * 100;
+            document.getElementById('memo-box').style.display = 'block';
         });
 
+        // 3. メモの保存
+        document.getElementById('save-btn').addEventListener('click', async () => {
+            const note = document.getElementById('memo-text').value;
+            await addDoc(pinsCollection, { x: tempX, y: tempY, note: note });
+            document.getElementById('memo-box').style.display = 'none';
+            document.getElementById('memo-text').value = '';
+        });
+
+        // 4. ピンのリアルタイム表示
         onSnapshot(pinsCollection, (snapshot) => {
             document.querySelectorAll('.pin').forEach(p => p.remove());
             snapshot.forEach(docSnap => {
@@ -69,6 +77,7 @@
                 pin.className = 'pin';
                 pin.style.left = data.x + '%';
                 pin.style.top = data.y + '%';
+                pin.onclick = () => alert(data.note || "メモなし"); // ピンをクリックでメモ表示
                 container.appendChild(pin);
             });
         });
