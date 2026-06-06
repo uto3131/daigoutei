@@ -42,6 +42,7 @@
             border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; display: inline-block;
         }
         .label-input { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #d2d2d7; font-size: 14px; }
+        .label-input:disabled { background: #f5f5f7; color: #86868b; }
         
         #controls {
             background: #ffffff; padding: 16px; border-radius: 14px;
@@ -85,7 +86,8 @@
             background: #0071e3; color: white; border: none; padding: 10px 18px;
             border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer;
         }
-        .btn-cancel { background: #86868b; color: white; margin-left: auto; }
+        .btn-cancel { background: #86868b; color: white; }
+        .btn-danger { background: #ff3b30; color: white; }
         
         .modal-buttons { display: flex; justify-content: flex-end; margin-top: 16px; gap: 8px; width: 100%; }
         .share-link-box {
@@ -116,7 +118,7 @@
         }
         .view-photo {
             width: 100%; max-height: 240px; object-fit: contain; border-radius: 10px;
-            border: 1px solid #d2d2d7; box-shadow: 0 4px 12px rgba(0,0,0,0.08); background: #000;
+            border: 1px solid #d2d2d7; box-shadow: 0 4px 12px rgba(0,0,0,0.08); background: #000; margin-bottom: 10px;
         }
     </style>
 </head>
@@ -144,10 +146,10 @@
         
         <div class="config-panel" id="config-panel-area">
             <h3>🎨 ピンの色と名前の設定</h3>
-            <div class="label-group"><div class="color-dot" style="background:#ff3b30;"></div><input type="text" id="label-red" class="label-input" value="要補修" disabled></div>
-            <div class="label-group"><div class="color-dot" style="background:#007aff;"></div><input type="text" id="label-blue" class="label-input" value="確認済み" disabled></div>
-            <div class="label-group"><div class="color-dot" style="background:#ffcc00;"></div><input type="text" id="label-yellow" class="label-input" value="保留" disabled></div>
-            <div class="label-group"><div class="color-dot" style="background:#34c759;"></div><input type="text" id="label-green" class="label-input" value="その他" disabled></div>
+            <div class="label-group"><div class="color-dot" style="background:#ff3b30;"></div><input type="text" id="label-red" class="label-input" value="要補修"></div>
+            <div class="label-group"><div class="color-dot" style="background:#007aff;"></div><input type="text" id="label-blue" class="label-input" value="確認済み"></div>
+            <div class="label-group"><div class="color-dot" style="background:#ffcc00;"></div><input type="text" id="label-yellow" class="label-input" value="保留"></div>
+            <div class="label-group"><div class="color-dot" style="background:#34c759;"></div><input type="text" id="label-green" class="label-input" value="その他"></div>
         </div>
     </div>
 </div>
@@ -155,7 +157,7 @@
 <div id="overlay"></div>
 
 <div id="memo-box" class="modal">
-    <h3>📌 情報をクラウドに記録</h3>
+    <h3 id="modal-title">📌 情報をクラウドに記録</h3>
     
     <div id="modal-color-section">
         <strong style="font-size: 13px;">🎨 ピンの色を選択:</strong>
@@ -185,14 +187,18 @@
     <div id="view-tag-el" class="view-tag">要補修</div>
     <div id="view-note-el" class="view-note">メモ内容</div>
     <img id="view-photo-el" class="view-photo" src="" alt="添付写真" style="display:none;">
-    <div class="modal-buttons">
-        <button class="btn btn-cancel" id="view-close-btn" style="margin-left:auto; width:100%;">閉じる</button>
+    <div class="modal-buttons" style="flex-direction: column; gap: 8px;">
+        <div style="display: flex; gap: 8px; width: 100%;" id="view-edit-buttons">
+            <button class="btn" id="edit-btn" style="flex: 1; background: #0071e3;">✏️ 編集する</button>
+            <button class="btn btn-danger" id="delete-btn" style="flex: 1;">🗑 このピンを削除</button>
+        </div>
+        <button class="btn btn-cancel" id="view-close-btn" style="width:100%;">閉じる</button>
     </div>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDL8fGnQYQg40ovPiZyrYxLJ-3e_iDKFdc",
@@ -206,11 +212,40 @@
     const urlParams = new URLSearchParams(window.location.search);
     const isViewOnly = urlParams.get('mode') === 'view';
 
+    // UI要素の取得
+    const container = document.getElementById('map-container');
+    const memoBox = document.getElementById('memo-box');
+    const modalTitle = document.getElementById('modal-title');
+    const overlay = document.getElementById('overlay');
+    const memoText = document.getElementById('memo-text');
+    const pinImageInput = document.getElementById('pin-image-input');
+    const pinImagePreview = document.getElementById('pin-image-preview');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+
+    const viewBox = document.getElementById('view-box');
+    const viewTagEl = document.getElementById('view-tag-el');
+    const viewNoteEl = document.getElementById('view-note-el');
+    const viewPhotoEl = document.getElementById('view-photo-el');
+    const viewCloseBtn = document.getElementById('view-close-btn');
+    const editBtn = document.getElementById('edit-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+    const viewEditButtons = document.getElementById('view-edit-buttons');
+
+    const labelInputs = {
+        "#ff3b30": document.getElementById('label-red'),
+        "#007aff": document.getElementById('label-blue'),
+        "#ffcc00": document.getElementById('label-yellow'),
+        "#34c759": document.getElementById('label-green')
+    };
+
     if (isViewOnly) {
         document.getElementById('view-only-banner').style.display = 'block';
         document.getElementById('share-area').style.display = 'none';
         document.getElementById('modal-upload-section').style.display = 'none';
         document.getElementById('modal-color-section').style.display = 'none';
+        viewEditButtons.style.display = 'none';
+        Object.values(labelInputs).forEach(input => input.disabled = true);
     }
 
     document.getElementById('gen-view-btn').addEventListener('click', () => {
@@ -224,166 +259,13 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const pinsCollection = collection(db, "pins");
-
-    const blueprint = document.getElementById('blueprint');
-    const container = document.getElementById('map-container');
-    const memoBox = document.getElementById('memo-box');
-    const overlay = document.getElementById('overlay');
-    const memoText = document.getElementById('memo-text');
-    const pinImageInput = document.getElementById('pin-image-input');
-    const pinImagePreview = document.getElementById('pin-image-preview');
-    const saveBtn = document.getElementById('save-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
-
-    const viewBox = document.getElementById('view-box');
-    const viewTagEl = document.getElementById('view-tag-el');
-    const viewNoteEl = document.getElementById('view-note-el');
-    const viewPhotoEl = document.getElementById('view-photo-el');
-    const viewCloseBtn = document.getElementById('view-close-btn');
-
-    const colorLabelMap = {
-        "#ff3b30": "要補修",
-        "#007aff": "確認済み",
-        "#ffcc00": "保留",
-        "#34c759": "その他"
-    };
+    const labelsDocRef = doc(db, "settings", "labels");
 
     let tempX = 0; let tempY = 0;
     let base64PinImage = "";
     let selectedColor = "#ff3b30";
+    let editingPinId = null; // 編集中のピンID（新規のときはnull）
 
-    document.querySelectorAll('.color-option').forEach(option => {
-        option.addEventListener('click', (e) => {
-            document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
-            e.target.classList.add('selected');
-            selectedColor = e.target.getAttribute('data-color');
-        });
-    });
-
-    // 📸 ピン内写真を軽量化圧縮する処理
-    function compressImage(file, maxWidth, maxHeight, quality) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = (event) => {
-                const img = new Image();
-                img.src = event.target.result;
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > height) {
-                        if (width > maxWidth) { height *= maxWidth / width; width = maxWidth; }
-                    } else {
-                        if (height > maxHeight) { width *= maxHeight / height; height = maxHeight; }
-                    }
-
-                    canvas.width = width; canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', quality));
-                };
-            };
-            reader.onerror = error => reject(error);
-        });
-    }
-
-    if (pinImageInput) {
-        pinImageInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            try {
-                base64PinImage = await compressImage(file, 600, 600, 0.6);
-                pinImagePreview.src = base64PinImage;
-                pinImagePreview.style.display = "block";
-            } catch (error) { console.error(error); }
-        });
-    }
-
-    container.addEventListener('click', (e) => {
-        if (isViewOnly) return;
-        if (e.target === blueprint || e.target === container) {
-            const rect = container.getBoundingClientRect();
-            tempX = ((e.clientX - rect.left) / rect.width) * 100;
-            tempY = ((e.clientY - rect.top) / rect.height) * 100;
-
-            memoText.value = '';
-            base64PinImage = "";
-            pinImagePreview.src = "";
-            pinImagePreview.style.display = "none";
-            if (pinImageInput) pinImageInput.value = "";
-            
-            selectedColor = "#ff3b30";
-            document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
-            const defaultOpt = document.querySelector('.color-option[data-color="#ff3b30"]');
-            if (defaultOpt) defaultOpt.classList.add('selected');
-
-            memoBox.style.display = 'block';
-            overlay.style.display = 'block';
-        }
-    });
-
-    saveBtn.addEventListener('click', async () => {
-        if (memoText.value.trim() === "" && !base64PinImage) return;
-        try {
-            await addDoc(pinsCollection, {
-                x: tempX,
-                y: tempY,
-                note: memoText.value,
-                pinImage: base64PinImage,
-                color: selectedColor,
-                createdAt: new Date().getTime()
-            });
-            closeModal();
-        } catch(err) { console.error("ピン保存エラー:", err); }
-    });
-
-    try {
-        onSnapshot(pinsCollection, (snapshot) => {
-            document.querySelectorAll('.pin').forEach(p => p.remove());
-            snapshot.forEach(docSnap => {
-                const data = docSnap.data();
-                const pin = document.createElement('div');
-                pin.className = 'pin';
-                pin.style.left = data.x + '%';
-                pin.style.top = data.y + '%';
-                pin.style.backgroundColor = data.color || '#ff3b30'; 
-
-                pin.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    
-                    const pColor = data.color || '#ff3b30';
-                    viewTagEl.textContent = colorLabelMap[pColor] || "未設定";
-                    viewTagEl.style.backgroundColor = pColor;
-                    viewNoteEl.textContent = data.note || "メモはありません";
-
-                    if (data.pinImage) {
-                        viewPhotoEl.src = data.pinImage;
-                        viewPhotoEl.style.display = "block";
-                    } else {
-                        viewPhotoEl.src = "";
-                        viewPhotoEl.style.display = "none";
-                    }
-
-                    viewBox.style.display = 'block';
-                    overlay.style.display = 'block';
-                });
-
-                container.appendChild(pin);
-            });
-        }, (err) => { console.log("ピン同期エラー:", err); });
-    } catch(e) { console.error(e); }
-
-    cancelBtn.addEventListener('click', closeModal);
-    viewCloseBtn.addEventListener('click', closeModal);
-    overlay.addEventListener('click', closeModal);
-    
-    function closeModal() {
-        memoBox.style.display = 'none';
-        viewBox.style.display = 'none';
-        overlay.style.display = 'none';
-    }
-</script>
-</body>
-</html>
+    // 色に対応する名前のデフォルト値
+    let colorLabelMap = {
+        "#ff3
