@@ -50,21 +50,19 @@
             display: flex; flex-direction: column; gap: 12px;
         }
         
-        /* 🔍 修正：外枠の縦幅を少し広くし、黒背景ではなくマップっぽく白背景に */
+        /* 🗺️ 見取り図を表示する外枠ウィンドウ */
         #map-wrapper {
             width: 100%; height: 70vh; min-height: 450px; background-color: #f5f5f7;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
             border: 1px solid rgba(0,0,0,0.1); overflow: hidden; position: relative;
-            cursor: grab; touch-action: none; /* スマホのブラウザスクロールを止めてマップ操作を優先 */
+            cursor: grab; touch-action: none;
         }
         #map-wrapper:active { cursor: grabbing; }
         
-        /* 🔍 修正：初期状態を「中央配置」にできるように設定 */
         #map-container {
             position: absolute; display: inline-block;
             user-select: none; -webkit-user-select: none;
         }
-        /* 🔍 修正：画像が枠内に最大化して収まるように設定 */
         #blueprint { 
             display: block; 
             max-width: 100%; 
@@ -73,11 +71,29 @@
             height: auto; 
         }
         
+        /* 📌 縮小最適化されたピンのスタイル */
         .pin {
-            position: absolute; width: 24px; height: 24px;
-            border: 2.5px solid #ffffff; border-radius: 50%; transform: translate(-50%, -50%);
-            cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+            position: absolute; 
+            width: 10px;        /* 24px から 10px にサイズダウン */
+            height: 10px;       /* 24px から 10px にサイズダウン */
+            border: 1.5px solid #ffffff; 
+            border-radius: 50%; 
+            transform: translate(-50%, -50%);
+            cursor: pointer; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             z-index: 10;
+            transition: transform 0.1s ease;
+        }
+        /* スマホ・マウスでも快適にタップできるよう、目に見えないタップ判定領域を広げる裏技 */
+        .pin::after {
+            content: '';
+            position: absolute;
+            top: -10px; left: -10px; right: -10px; bottom: -10px;
+            border-radius: 50%;
+        }
+        /* ピンに触れた（ホバーした）時に少しだけ強調表示 */
+        .pin:hover {
+            transform: translate(-50%, -50%) scale(1.3);
         }
         
         .modal {
@@ -287,12 +303,15 @@
         resultBox.style.display = 'block';
     });
 
-    // 🔍 修正：初期表示で綺麗に中央収まるように設定を変更
+    // 🔍 ズーム機能の初期化（最大8倍、ピン誤動線のガード付き）
     const panzoom = Panzoom(container, {
-        maxScale: 8, // 細かく打てるように最大8倍まで拡張
+        maxScale: 8, 
         minScale: 1,
         contain: 'outside',
-        startScale: 1
+        startScale: 1,
+        handleStartEvent: (e) => {
+            if (e.target.classList.contains('pin')) return false;
+        }
     });
 
     wrapper.addEventListener('wheel', (e) => {
@@ -300,17 +319,15 @@
         panzoom.zoomWithWheel(e);
     });
 
-    // 🔍 修正：画像が読み込み完了した瞬間に位置を中央にカチッと整える処理
+    // 🔍 マップを中央にフィットさせて全体表示する処理
     function initMapPosition() {
         const wrapperRect = wrapper.getBoundingClientRect();
         const imgWidth = blueprint.offsetWidth;
         const imgHeight = blueprint.offsetHeight;
         
-        // コンテナのサイズを画像にジャストフィットさせる
         container.style.width = imgWidth + 'px';
         container.style.height = imgHeight + 'px';
 
-        // 中央に配置するための初期ズレ（X, Y）を計算してジャンプ
         const initialX = (wrapperRect.width - imgWidth) / 2;
         const initialY = (wrapperRect.height - imgHeight) / 2;
         panzoom.pan(initialX, initialY);
@@ -420,7 +437,7 @@
         });
     }
 
-    // 🔍 修正：指を離した瞬間の誤作動をブロックする超厳密な距離判定
+    // 🔍 移動（スクロール・ドラッグ）と純粋なタップを識別する超厳密判定
     let startX = 0; let startY = 0;
     let hasMoved = false;
 
@@ -431,7 +448,6 @@
     });
 
     wrapper.addEventListener('pointermove', (e) => {
-        // 初期位置から数ピクセルでも動いたら「移動（ドラッグやズーム）した」とみなす
         if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
             hasMoved = true;
         }
@@ -440,7 +456,6 @@
     container.addEventListener('click', (e) => {
         if (isViewOnly) return;
         if (hasMoved) {
-            // 🔍 修正：画面をズーム・移動させた直後の場合は処理を完全にスルーする
             hasMoved = false;
             return;
         }
@@ -518,7 +533,7 @@
 
                 pin.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (hasMoved) return; // 🔍 ピンの真上でドラッグを終えた時の誤作動防止
+                    if (hasMoved) return; 
                     
                     const pColor = data.color || '#ff3b30';
                     viewTagEl.textContent = colorLabelMap[pColor] || "未設定";
