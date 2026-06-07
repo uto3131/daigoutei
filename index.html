@@ -80,13 +80,12 @@
             border: 1.5px solid #ffffff; 
             border-radius: 50%; 
             transform: translate(-50%, -50%);
-            cursor: move; /* ドラッグ可能であることを示すアイコンに変更 */
+            cursor: move; 
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             z-index: 10;
             transition: transform 0.1s ease;
-            touch-action: none; /* ブラウザ標準のスクロールを阻害しないための設定 */
+            touch-action: none; 
         }
-        /* タップ・ドラッグ判定を広げるための領域 */
         .pin::after {
             content: '';
             position: absolute;
@@ -96,7 +95,6 @@
         .pin:hover {
             transform: translate(-50%, -50%) scale(1.3);
         }
-        /* ドラッグ中のピンの視覚効果 */
         .pin.dragging {
             transform: translate(-50%, -50%) scale(1.5);
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
@@ -187,7 +185,7 @@
             <div id="map-wrapper">
                 <div class="zoom-help">📱 指2本で拡大・移動 / 💻 ホイールで拡大・ドラッグ移動 (ピンの長押しドラッグで位置調整)</div>
                 <div id="map-container">
-                    <img id="blueprint" src="260607_33go_全体見取り図.jpg" alt="見取り図">
+                    <img id="blueprint" src="map.jpg" alt="見取り図">
                 </div>
             </div>
         </div>
@@ -206,7 +204,6 @@
 
 <div id="memo-box" class="modal">
     <h3 id="modal-title">📌 情報をクラウドに記録</h3>
-    
     <div id="modal-color-section">
         <strong style="font-size: 13px;">🎨 ピンの色を選択:</strong>
         <div class="color-selector">
@@ -216,15 +213,12 @@
             <div class="color-option" data-color="#34c759" style="background: #34c759;"></div>
         </div>
     </div>
-
     <textarea id="memo-text" placeholder="ここにメモを入力..."></textarea>
-    
     <div id="modal-upload-section">
         <strong style="font-size: 13px;">🖼 写真を追加 (任意):</strong>
         <input type="file" id="pin-image-input" class="modal-image-input" accept="image/*">
         <img id="pin-image-preview" class="preview-thumb" alt="プレビュー">
     </div>
-
     <div class="modal-buttons">
         <button class="btn" id="save-btn">保存</button>
         <button class="btn btn-cancel" id="cancel-btn">キャンセル</button>
@@ -235,9 +229,7 @@
     <div id="view-tag-el" class="view-tag">要対応</div>
     <div id="view-note-el" class="view-note">メモ内容</div>
     <img id="view-photo-el" class="view-photo" src="" alt="添付写真" style="display:none;">
-    
     <div id="view-timestamp-el" class="view-timestamp"></div>
-    
     <div class="modal-buttons" style="flex-direction: column; gap: 8px;">
         <div style="display: flex; gap: 8px; width: 100%;" id="view-edit-buttons">
             <button class="btn" id="edit-btn" style="flex: 1; background: #0071e3;">✏️ 編集する</button>
@@ -310,7 +302,6 @@
         resultBox.style.display = 'block';
     });
 
-    // 🔍 ズーム機能の初期化
     const panzoom = Panzoom(container, {
         maxScale: 8, 
         minScale: 1,
@@ -319,7 +310,6 @@
         step: 0.4,          
         animate: false,     
         handleStartEvent: (e) => {
-            // ピンそのもの、またはピンのドラッグ中はマップ移動を止める
             if (e.target.classList.contains('pin') || isDraggingPin) return false;
         }
     });
@@ -367,7 +357,7 @@
     let base64PinImage = "";
     let selectedColor = "#ff3b30";
     let editingPinId = null;
-    let isDraggingPin = false; // 📌 ドラッグ中かどうかのフラグ
+    let isDraggingPin = false; 
 
     let colorLabelMap = {
         "#ff3b30": "要対応",
@@ -538,13 +528,11 @@
         } catch(err) { console.error("ピン保存エラー:", err); }
     });
 
-    // 📌 ドラッグ＆ドロップの仕組みを構築する関数
     function makePinDraggable(pin, id) {
         if (isViewOnly) return;
 
         let pinDragMoved = false;
 
-        // マウス・タッチ開始
         pin.addEventListener('pointerdown', (e) => {
             e.stopPropagation();
             pin.setPointerCapture(e.pointerId);
@@ -553,18 +541,15 @@
             pin.classList.add('dragging');
         });
 
-        // 移動中
         pin.addEventListener('pointermove', (e) => {
             if (!isDraggingPin || !pin.classList.contains('dragging')) return;
             e.stopPropagation();
             pinDragMoved = true;
 
             const rect = blueprint.getBoundingClientRect();
-            // 現在のズーム倍率を考慮して、見取り図に対する％位置をリアルタイム計算
             let currentX = ((e.clientX - rect.left) / rect.width) * 100;
             let currentY = ((e.clientY - rect.top) / rect.height) * 100;
 
-            // 枠外への飛び出し防止ガード
             if (currentX < 0) currentX = 0; if (currentX > 100) currentX = 100;
             if (currentY < 0) currentY = 0; if (currentY > 100) currentY = 100;
 
@@ -572,7 +557,6 @@
             pin.style.top = currentY + '%';
         });
 
-        // ドラッグ終了（指/マウスを離した瞬間）
         pin.addEventListener('pointerup', async (e) => {
             if (!isDraggingPin) return;
             e.stopPropagation();
@@ -580,12 +564,10 @@
             pin.classList.remove('dragging');
             isDraggingPin = false;
 
-            // ほとんど動いていない場合は単なる「タップ（詳細表示）」として処理
             if (!pinDragMoved) {
                 return; 
             }
 
-            // がっつり動いた場合はFirebaseへ新しい座標を即時保存！
             const rect = blueprint.getBoundingClientRect();
             let finalX = ((e.clientX - rect.left) / rect.width) * 100;
             let finalY = ((e.clientY - rect.top) / rect.height) * 100;
@@ -604,7 +586,6 @@
 
     onSnapshot(pinsCollection, (snapshot) => {
         try {
-            // ドラッグ中のピンがある場合は、他人の同期によるカクつきを防ぐため再描画をスキップ
             if (isDraggingPin) return;
 
             document.querySelectorAll('.pin').forEach(p => p.remove());
@@ -619,10 +600,8 @@
                 pin.style.top = data.y + '%';
                 pin.style.backgroundColor = data.color || '#ff3b30'; 
 
-                // ドラッグ＆ドロップ機能をピンに付与
                 makePinDraggable(pin, id);
 
-                // タップした時の詳細表示
                 pin.addEventListener('click', (e) => {
                     e.stopPropagation();
                     
