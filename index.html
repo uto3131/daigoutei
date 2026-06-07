@@ -74,8 +74,8 @@
         /* 📌 縮小最適化されたピンのスタイル */
         .pin {
             position: absolute; 
-            width: 10px;        /* 24px から 10px にサイズダウン */
-            height: 10px;       /* 24px から 10px にサイズダウン */
+            width: 10px;        
+            height: 10px;       
             border: 1.5px solid #ffffff; 
             border-radius: 50%; 
             transform: translate(-50%, -50%);
@@ -303,12 +303,15 @@
         resultBox.style.display = 'block';
     });
 
-    // 🔍 ズーム機能の初期化（最大8倍、ピン誤動線のガード付き）
+    // 🔍 ズーム機能の初期化（速度アップ＆なめらかアニメーション仕様）
     const panzoom = Panzoom(container, {
         maxScale: 8, 
         minScale: 1,
         contain: 'outside',
         startScale: 1,
+        step: 0.3,         /* ズームの速度（これまでの約3倍速） */
+        animate: true,     /* なめらかアニメーションを有効化 */
+        duration: 150,     /* ズームアニメーションの時間（150ミリ秒でシュッと動く） */
         handleStartEvent: (e) => {
             if (e.target.classList.contains('pin')) return false;
         }
@@ -319,7 +322,6 @@
         panzoom.zoomWithWheel(e);
     });
 
-    // 🔍 マップを中央にフィットさせて全体表示する処理
     function initMapPosition() {
         const wrapperRect = wrapper.getBoundingClientRect();
         const imgWidth = blueprint.offsetWidth;
@@ -437,7 +439,6 @@
         });
     }
 
-    // 🔍 移動（スクロール・ドラッグ）と純粋なタップを識別する超厳密判定
     let startX = 0; let startY = 0;
     let hasMoved = false;
 
