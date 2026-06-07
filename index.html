@@ -50,14 +50,20 @@
             display: flex; flex-direction: column; gap: 12px;
         }
         
+        /* 🔍 ズーム操作用の土台ラッパー */
+        #map-wrapper {
+            width: 100%; height: 65vh; min-height: 400px; background-color: #e5e5ea;
+            border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            border: 1px solid rgba(0,0,0,0.05); overflow: hidden; position: relative;
+            cursor: grab;
+        }
+        #map-wrapper:active { cursor: grabbing; }
+        
         #map-container {
-            position: relative; display: inline-block; background-color: #ffffff;
-            border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); overflow: hidden;
-            max-width: 100%; border: 1px solid rgba(0,0,0,0.05); min-width: 100%; min-height: 200px;
+            position: absolute; display: inline-block; top: 0; left: 0; transform-origin: 0 0;
             user-select: none; -webkit-user-select: none;
         }
-        @media (min-width: 768px) { #map-container { min-width: 320px; } }
-        #blueprint { display: block; max-width: 100%; height: auto; width: 100%; }
+        #blueprint { display: block; max-width: none; height: auto; max-height: 100%; }
         
         .pin {
             position: absolute; width: 24px; height: 24px;
@@ -114,13 +120,24 @@
         }
         .view-note {
             font-size: 15px; line-height: 1.5; white-space: pre-wrap; color: #1d1d1f;
-            background: #f5f5f7; padding: 12px; border-radius: 10px; margin-bottom: 15px;
+            background: #f5f5f7; padding: 12px; border-radius: 10px; margin-bottom: 10px;
         }
         .view-photo {
             width: 100%; max-height: 240px; object-fit: contain; border-radius: 10px;
             border: 1px solid #d2d2d7; box-shadow: 0 4px 12px rgba(0,0,0,0.08); background: #000; margin-bottom: 10px;
         }
+        /* 🕒 日時表示用のスタイル */
+        .view-timestamp {
+            font-size: 11px; color: #86868b; line-height: 1.4; margin-bottom: 15px; padding-left: 4px;
+        }
+        
+        /* 🗺️ 操作ヘルプ */
+        .zoom-help {
+            position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.6);
+            color: white; padding: 4px 10px; border-radius: 20px; font-size: 11px; pointer-events: none; z-index: 50;
+        }
     </style>
+    <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
 </head>
 <body>
 
@@ -128,7 +145,7 @@
     <h1>🗺 見取り図ピン留めアプリ</h1>
     <p class="subtitle">ピンの追加・メモ・写真の登録がリアルタイムに全員の画面へ同期されます。</p>
     
-    <div id="view-only-banner">🔒 現在「閲覧専用（書き込み禁止）モード」で開いているか、データがありません。</div>
+    <div id="view-only-banner">🔒 現在「閲覧専用（書き込み禁止）モード」で開いています。</div>
     
     <div id="controls">
         <div id="share-area">
@@ -139,8 +156,11 @@
 
     <div class="app-layout">
         <div class="main-area">
-            <div id="map-container">
-                <img id="blueprint" src="blueprint.jpg" alt="見取り図">
+            <div id="map-wrapper">
+                <div class="zoom-help">📱 指2本で拡大・移動 / 💻 ホイールで拡大・ドラッグ移動</div>
+                <div id="map-container">
+                    <img id="blueprint" src="blueprint.jpg" alt="見取り図">
+                </div>
             </div>
         </div>
         
@@ -187,6 +207,9 @@
     <div id="view-tag-el" class="view-tag">要補修</div>
     <div id="view-note-el" class="view-note">メモ内容</div>
     <img id="view-photo-el" class="view-photo" src="" alt="添付写真" style="display:none;">
+    
+    <div id="view-timestamp-el" class="view-timestamp"></div>
+    
     <div class="modal-buttons" style="flex-direction: column; gap: 8px;">
         <div style="display: flex; gap: 8px; width: 100%;" id="view-edit-buttons">
             <button class="btn" id="edit-btn" style="flex: 1; background: #0071e3;">✏️ 編集する</button>
@@ -212,7 +235,10 @@
     const urlParams = new URLSearchParams(window.location.search);
     const isViewOnly = urlParams.get('mode') === 'view';
 
+    const wrapper = document.getElementById('map-wrapper');
     const container = document.getElementById('map-container');
+    const blueprint = document.getElementById('blueprint');
+    
     const memoBox = document.getElementById('memo-box');
     const modalTitle = document.getElementById('modal-title');
     const overlay = document.getElementById('overlay');
@@ -226,6 +252,7 @@
     const viewTagEl = document.getElementById('view-tag-el');
     const viewNoteEl = document.getElementById('view-note-el');
     const viewPhotoEl = document.getElementById('view-photo-el');
+    const viewTimestampEl = document.getElementById('view-timestamp-el');
     const viewCloseBtn = document.getElementById('view-close-btn');
     const editBtn = document.getElementById('edit-btn');
     const deleteBtn = document.getElementById('delete-btn');
@@ -255,6 +282,20 @@
         resultBox.style.display = 'block';
     });
 
+    // 🔍 ズーム機能の初期化設定
+    const panzoom = Panzoom(container, {
+        maxScale: 6, // 最大6倍まで拡大可能
+        minScale: 1,
+        contain: 'outside',
+        startScale: 1
+    });
+
+    // マウスホイールでのズームを有効化
+    wrapper.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) return; // ブラウザ全体のズームは無視
+        panzoom.zoomWithWheel(e);
+    });
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const pinsCollection = collection(db, "pins");
@@ -272,7 +313,18 @@
         "#34c759": "その他"
     };
 
-    // 🛠️ 修正ポイント：ラベルの読み込み時にデータが無い場合のガード（フォールバック）を徹底
+    // 日時を「YYYY/MM/DD HH:MM」に整形する関数
+    function formatDate(timestamp) {
+        if (!timestamp) return "";
+        const date = new Date(timestamp);
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const hr = String(date.getHours()).padStart(2, '0');
+        const min = String(date.getMinutes()).padStart(2, '0');
+        return `${y}/${m}/${d} ${hr}:${min}`;
+    }
+
     onSnapshot(labelsDocRef, (docSnap) => {
         try {
             if (docSnap.exists()) {
@@ -285,7 +337,7 @@
                 });
             }
         } catch(e) { console.error("ラベル同期エラー:", e); }
-    }, (err) => { console.log("ラベル取得制限:", err); });
+    });
 
     if (!isViewOnly) {
         Object.keys(labelInputs).forEach(color => {
@@ -343,12 +395,22 @@
         });
     }
 
+    // 🔍 修正：ドラッグ移動とクリック（ピン打ち）を判別する処理
+    let isDragging = false;
+    wrapper.addEventListener('panzoomstart', () => { isDragging = false; });
+    wrapper.addEventListener('panzoomchange', () => { isDragging = true; });
+
     container.addEventListener('click', (e) => {
         if (isViewOnly) return;
-        if (e.target === document.getElementById('blueprint') || e.target === container) {
-            const rect = container.getBoundingClientRect();
-            tempX = ((e.clientX - rect.left) / rect.width) * 100;
-            tempY = ((e.clientY - rect.top) / rect.height) * 100;
+        if (isDragging) return; // ドラッグ移動中のクリックならピンを打たない
+
+        if (e.target === blueprint || e.target === container) {
+            // 🔍 ズーム倍率を計算に入れて、正しい画像上の座標を取得する
+            const rect = blueprint.getBoundingClientRect();
+            const currentScale = panzoom.getScale();
+            
+            tempX = ((e.clientX - rect.left) / (rect.width)) * 100;
+            tempY = ((e.clientY - rect.top) / (rect.height)) * 100;
 
             editingPinId = null;
             modalTitle.textContent = "📌 情報をクラウドに記録";
@@ -378,11 +440,12 @@
     saveBtn.addEventListener('click', async () => {
         if (memoText.value.trim() === "" && !base64PinImage) return;
         try {
+            const now = new Date().getTime();
             const pinData = {
                 note: memoText.value,
                 pinImage: base64PinImage,
                 color: selectedColor,
-                updatedAt: new Date().getTime()
+                updatedAt: now
             };
 
             if (editingPinId) {
@@ -393,14 +456,13 @@
                     ...pinData,
                     x: tempX,
                     y: tempY,
-                    createdAt: new Date().getTime()
+                    createdAt: now
                 });
             }
             closeModal();
         } catch(err) { console.error("ピン保存エラー:", err); }
     });
 
-    // 🛠️ 修正ポイント：独立したピンのリアルタイム同期。ラベルの読み込み状態に依存せず、いつでも描画する
     onSnapshot(pinsCollection, (snapshot) => {
         try {
             document.querySelectorAll('.pin').forEach(p => p.remove());
@@ -417,6 +479,7 @@
 
                 pin.addEventListener('click', (e) => {
                     e.stopPropagation();
+                    if (isDragging) return; // ドラッグ終了時の誤タップ防止
                     
                     const pColor = data.color || '#ff3b30';
                     viewTagEl.textContent = colorLabelMap[pColor] || "未設定";
@@ -430,6 +493,13 @@
                         viewPhotoEl.src = "";
                         viewPhotoEl.style.display = "none";
                     }
+
+                    // 🕒 日時テキストを作成して表示
+                    let timeHtml = `⏱ 登録: ${formatDate(data.createdAt || data.updatedAt)}`;
+                    if (data.createdAt && data.updatedAt && data.updatedAt !== data.createdAt) {
+                        timeHtml += `<br>🔄 更新: ${formatDate(data.updatedAt)}`;
+                    }
+                    viewTimestampEl.innerHTML = timeHtml;
 
                     editBtn.onclick = () => { openEditModal(id, data); };
                     deleteBtn.onclick = async () => {
@@ -446,7 +516,7 @@
                 container.appendChild(pin);
             });
         } catch (e) { console.error("ピン描画エラー:", e); }
-    }, (err) => { console.log("ピン同期制限:", err); });
+    });
 
     function openEditModal(id, data) {
         viewBox.style.display = 'none';
