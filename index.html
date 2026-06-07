@@ -72,7 +72,7 @@
             height: auto; 
         }
         
-        /* 📌 小さいサイズのピン */
+        /* 📌 ピンのスタイル */
         .pin {
             position: absolute; 
             width: 10px;        
@@ -80,19 +80,27 @@
             border: 1.5px solid #ffffff; 
             border-radius: 50%; 
             transform: translate(-50%, -50%);
-            cursor: pointer; 
+            cursor: move; /* ドラッグ可能であることを示すアイコンに変更 */
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             z-index: 10;
             transition: transform 0.1s ease;
+            touch-action: none; /* ブラウザ標準のスクロールを阻害しないための設定 */
         }
+        /* タップ・ドラッグ判定を広げるための領域 */
         .pin::after {
             content: '';
             position: absolute;
-            top: -12px; left: -12px; right: -12px; bottom: -12px;
+            top: -14px; left: -14px; right: -14px; bottom: -14px;
             border-radius: 50%;
         }
         .pin:hover {
             transform: translate(-50%, -50%) scale(1.3);
+        }
+        /* ドラッグ中のピンの視覚効果 */
+        .pin.dragging {
+            transform: translate(-50%, -50%) scale(1.5);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            z-index: 100;
         }
         
         .modal {
@@ -177,9 +185,9 @@
     <div class="app-layout">
         <div class="main-area">
             <div id="map-wrapper">
-                <div class="zoom-help">📱 指2本で拡大・移動 / 💻 ホイールで拡大・ドラッグ移動</div>
+                <div class="zoom-help">📱 指2本で拡大・移動 / 💻 ホイールで拡大・ドラッグ移動 (ピンの長押しドラッグで位置調整)</div>
                 <div id="map-container">
-                    <img id="blueprint" src="blueprint.jpg" alt="見取り図">
+                    <img id="blueprint" src="260607_33go_全体見取り図.jpg" alt="見取り図">
                 </div>
             </div>
         </div>
@@ -302,41 +310,34 @@
         resultBox.style.display = 'block';
     });
 
-    // 🔍 ズーム機能の初期化（PCでのホイール爆速仕様）
+    // 🔍 ズーム機能の初期化
     const panzoom = Panzoom(container, {
         maxScale: 8, 
         minScale: 1,
         contain: 'outside',
         startScale: 1,
-        step: 0.4,          /* PCのズーム量をさらに増やして爆速化 */
-        animate: false,     /* 初期位置のバグを防ぐため基本アニメーションはオフ */
+        step: 0.4,          
+        animate: false,     
         handleStartEvent: (e) => {
-            if (e.target.classList.contains('pin')) return false;
+            // ピンそのもの、またはピンのドラッグ中はマップ移動を止める
+            if (e.target.classList.contains('pin') || isDraggingPin) return false;
         }
     });
 
-    // 📱 スマホの指2本ピンチズームを「爆速・なめらか」にするフック処理
     wrapper.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) {
-            // ライブラリの標準処理の後に、少しだけ追加のスケールを上書きしてキビキビ動かします
-            const currentScale = panzoom.getScale();
-            panzoom.setOptions({ animate: true, duration: 60 }); // スマホ追従用超短時間アニメ
+        if (e.touches.length === 2 && !isDraggingPin) {
+            panzoom.setOptions({ animate: true, duration: 60 }); 
         }
     }, { passive: true });
 
-    // 💻 PCのホイールスクロール時の速度と滑らかさの上書き設定
     wrapper.addEventListener('wheel', (e) => {
         if (e.ctrlKey) return;
-        // ホイールの時だけ滑らかに動かす
         panzoom.setOptions({ animate: true, duration: 120 });
         panzoom.zoomWithWheel(e);
     });
 
-    // 🗺 マップを中央に「ピタッ」と全体表示させる処理（バグ修正版）
     function initMapPosition() {
-        // 初期配置時はアニメーションを一時的に完全に切る（画像飛びバグを防ぐ）
         panzoom.setOptions({ animate: false });
-        
         const wrapperRect = wrapper.getBoundingClientRect();
         const imgWidth = blueprint.offsetWidth;
         const imgHeight = blueprint.offsetHeight;
@@ -366,6 +367,7 @@
     let base64PinImage = "";
     let selectedColor = "#ff3b30";
     let editingPinId = null;
+    let isDraggingPin = false; // 📌 ドラッグ中かどうかのフラグ
 
     let colorLabelMap = {
         "#ff3b30": "要対応",
@@ -459,19 +461,21 @@
     let hasMoved = false;
 
     wrapper.addEventListener('pointerdown', (e) => {
+        if (isDraggingPin) return;
         startX = e.clientX;
         startY = e.clientY;
         hasMoved = false;
     });
 
     wrapper.addEventListener('pointermove', (e) => {
+        if (isDraggingPin) return;
         if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
             hasMoved = true;
         }
     });
 
     container.addEventListener('click', (e) => {
-        if (isViewOnly) return;
+        if (isViewOnly || isDraggingPin) return;
         if (hasMoved) {
             hasMoved = false;
             return;
@@ -534,8 +538,75 @@
         } catch(err) { console.error("ピン保存エラー:", err); }
     });
 
+    // 📌 ドラッグ＆ドロップの仕組みを構築する関数
+    function makePinDraggable(pin, id) {
+        if (isViewOnly) return;
+
+        let pinDragMoved = false;
+
+        // マウス・タッチ開始
+        pin.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            pin.setPointerCapture(e.pointerId);
+            isDraggingPin = true;
+            pinDragMoved = false;
+            pin.classList.add('dragging');
+        });
+
+        // 移動中
+        pin.addEventListener('pointermove', (e) => {
+            if (!isDraggingPin || !pin.classList.contains('dragging')) return;
+            e.stopPropagation();
+            pinDragMoved = true;
+
+            const rect = blueprint.getBoundingClientRect();
+            // 現在のズーム倍率を考慮して、見取り図に対する％位置をリアルタイム計算
+            let currentX = ((e.clientX - rect.left) / rect.width) * 100;
+            let currentY = ((e.clientY - rect.top) / rect.height) * 100;
+
+            // 枠外への飛び出し防止ガード
+            if (currentX < 0) currentX = 0; if (currentX > 100) currentX = 100;
+            if (currentY < 0) currentY = 0; if (currentY > 100) currentY = 100;
+
+            pin.style.left = currentX + '%';
+            pin.style.top = currentY + '%';
+        });
+
+        // ドラッグ終了（指/マウスを離した瞬間）
+        pin.addEventListener('pointerup', async (e) => {
+            if (!isDraggingPin) return;
+            e.stopPropagation();
+            pin.releasePointerCapture(e.pointerId);
+            pin.classList.remove('dragging');
+            isDraggingPin = false;
+
+            // ほとんど動いていない場合は単なる「タップ（詳細表示）」として処理
+            if (!pinDragMoved) {
+                return; 
+            }
+
+            // がっつり動いた場合はFirebaseへ新しい座標を即時保存！
+            const rect = blueprint.getBoundingClientRect();
+            let finalX = ((e.clientX - rect.left) / rect.width) * 100;
+            let finalY = ((e.clientY - rect.top) / rect.height) * 100;
+
+            if (finalX < 0) finalX = 0; if (finalX > 100) finalX = 100;
+            if (finalY < 0) finalY = 0; if (finalY > 100) finalY = 100;
+
+            try {
+                const docRef = doc(db, "pins", id);
+                await setDoc(docRef, { x: finalX, y: finalY, updatedAt: new Date().getTime() }, { merge: true });
+            } catch (err) {
+                console.error("ピン位置の更新に失敗しました:", err);
+            }
+        });
+    }
+
     onSnapshot(pinsCollection, (snapshot) => {
         try {
+            // ドラッグ中のピンがある場合は、他人の同期によるカクつきを防ぐため再描画をスキップ
+            if (isDraggingPin) return;
+
             document.querySelectorAll('.pin').forEach(p => p.remove());
             snapshot.forEach(docSnap => {
                 const id = docSnap.id;
@@ -548,9 +619,12 @@
                 pin.style.top = data.y + '%';
                 pin.style.backgroundColor = data.color || '#ff3b30'; 
 
+                // ドラッグ＆ドロップ機能をピンに付与
+                makePinDraggable(pin, id);
+
+                // タップした時の詳細表示
                 pin.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (hasMoved) return; 
                     
                     const pColor = data.color || '#ff3b30';
                     viewTagEl.textContent = colorLabelMap[pColor] || "未設定";
