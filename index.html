@@ -50,7 +50,7 @@
             display: flex; flex-direction: column; gap: 12px;
         }
         
-        /* 🗺️ 見取り図を表示する外枠ウィンドウ（PC版で切れないよう高さを最適化） */
+        /* 🗺️ 見取り図外枠ウィンドウ（全体がきれいに入るように調整） */
         #map-wrapper {
             width: 100%; height: 75vh; min-height: 500px; background-color: #f5f5f7;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
@@ -64,19 +64,18 @@
             user-select: none; -webkit-user-select: none;
             transform-origin: 0 0;
         }
+        /* 見取り図画像が上下で削られないように max-height 制限を解除し全体を保持 */
         #blueprint { 
             display: block; 
-            max-width: 100%; 
-            max-height: 75vh; /* 上下が途切れないように引き上げ */
             width: auto; 
             height: auto; 
         }
         
-        /* 📌 ピンのスタイル（スマホ最適化：サイズを半分以下に変更） */
+        /* 📌 ピンの基本スタイル（スマホ版基準：4pxの極小サイズ） */
         .pin {
             position: absolute; 
-            width: 4px;        /* 10pxから4pxへ縮小 */
-            height: 4px;       /* 10pxから4pxへ縮小 */
+            width: 4px;        
+            height: 4px;       
             border: 1px solid #ffffff; 
             border-radius: 50%; 
             transform: translate(-50%, -50%);
@@ -86,7 +85,17 @@
             transition: transform 0.1s ease;
             touch-action: none; 
         }
-        /* タップしづらくならないよう、判定判定（シークレット領域）は維持 */
+        
+        /* 💻 パソコン（PC）環境のみ、ピンのサイズを3ポイント大きい「7px」に上書き */
+        @media (min-width: 768px) {
+            .pin {
+                width: 7px;
+                height: 7px;
+                border: 1.5px solid #ffffff;
+            }
+        }
+
+        /* タップ・クリック判定用のシークレット領域（操作性を損なわないための広めの判定） */
         .pin::after {
             content: '';
             position: absolute;
@@ -155,6 +164,7 @@
             width: 100%; max-height: 240px; object-fit: contain; border-radius: 10px;
             border: 1px solid #d2d2d7; box-shadow: 0 4px 12px rgba(0,0,0,0.08); background: #000; margin-bottom: 10px;
         }
+        .view-note:empty { display: none; }
         .view-timestamp {
             font-size: 11px; color: #86868b; line-height: 1.4; margin-bottom: 15px; padding-left: 4px;
         }
@@ -306,16 +316,16 @@
     // 📱 指の数をトラッキングするための変数
     let activeTouches = 0;
 
-    // Panzoom設定（PC・スマホそれぞれ最適化）
+    // Panzoom設定（PC・スマホそれぞれ完全最適化）
     const panzoom = Panzoom(container, {
         maxScale: 8, 
         minScale: 1,
         contain: 'outside',
         startScale: 1,
-        step: 0.2,            // 💻 PCでのホイールズーム速度を半分（0.4→0.2）にして滑らかに
+        step: 0.2,            // 💻 PCでのホイールズーム速度を半分（0.2）にしてマイルドに
+        touchSpeed: 2.5,      // 📱 スマホ専用のピンチズーム感度を限界突破（2.5倍）に設定
         animate: false,     
         handleStartEvent: (e) => {
-            // スマホで2本指操作中、またはピン移動中は地図移動を制限
             if (e.target.classList.contains('pin') || isDraggingPin || activeTouches >= 2) return false;
         }
     });
@@ -332,7 +342,6 @@
     wrapper.addEventListener('touchmove', (e) => {
         activeTouches = e.touches.length;
         if (e.touches.length === 2 && !isDraggingPin) {
-            // 📱 スマホでの2本指ズーム速度をアップ
             panzoom.setOptions({ animate: true, duration: 60 }); 
         }
     }, { passive: true });
@@ -551,7 +560,6 @@
         let pinDragMoved = false;
 
         pin.addEventListener('pointerdown', (e) => {
-            // 🛡️ 画面に指が2本以上あるときは、ピン移動を即座にキャンセル（誤作動防止）
             if (activeTouches >= 2) {
                 isDraggingPin = false;
                 return;
@@ -564,7 +572,6 @@
         });
 
         pin.addEventListener('pointermove', (e) => {
-            // 移動中であっても、指が2本検知されたらドラッグモードを安全に終了
             if (activeTouches >= 2) {
                 pin.classList.remove('dragging');
                 isDraggingPin = false;
@@ -631,13 +638,13 @@
                 makePinDraggable(pin, id);
 
                 pin.addEventListener('click', (e) => {
-                    if (activeTouches >= 2) return; // 2本指ズーム時は詳細ポップアップも開かない
+                    if (activeTouches >= 2) return; 
                     e.stopPropagation();
                     
                     const pColor = data.color || '#ff3b30';
                     viewTagEl.textContent = colorLabelMap[pColor] || "未設定";
                     viewTagEl.style.backgroundColor = pColor;
-                    viewNoteEl.textContent = data.note || "メモはありません";
+                    viewNoteEl.textContent = data.note || "";
 
                     if (data.pinImage) {
                         viewPhotoEl.src = data.pinImage;
