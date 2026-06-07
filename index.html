@@ -50,20 +50,28 @@
             display: flex; flex-direction: column; gap: 12px;
         }
         
-        /* 🔍 ズーム操作用の土台ラッパー */
+        /* 🔍 修正：外枠の縦幅を少し広くし、黒背景ではなくマップっぽく白背景に */
         #map-wrapper {
-            width: 100%; height: 65vh; min-height: 400px; background-color: #e5e5ea;
+            width: 100%; height: 70vh; min-height: 450px; background-color: #f5f5f7;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-            border: 1px solid rgba(0,0,0,0.05); overflow: hidden; position: relative;
-            cursor: grab;
+            border: 1px solid rgba(0,0,0,0.1); overflow: hidden; position: relative;
+            cursor: grab; touch-action: none; /* スマホのブラウザスクロールを止めてマップ操作を優先 */
         }
         #map-wrapper:active { cursor: grabbing; }
         
+        /* 🔍 修正：初期状態を「中央配置」にできるように設定 */
         #map-container {
-            position: absolute; display: inline-block; top: 0; left: 0; transform-origin: 0 0;
+            position: absolute; display: inline-block;
             user-select: none; -webkit-user-select: none;
         }
-        #blueprint { display: block; max-width: none; height: auto; max-height: 100%; }
+        /* 🔍 修正：画像が枠内に最大化して収まるように設定 */
+        #blueprint { 
+            display: block; 
+            max-width: 100%; 
+            max-height: 70vh; 
+            width: auto; 
+            height: auto; 
+        }
         
         .pin {
             position: absolute; width: 24px; height: 24px;
@@ -112,7 +120,6 @@
         .color-option:hover { transform: scale(1.1); }
         .color-option.selected { border-color: #000000; box-shadow: 0 0 4px rgba(0,0,0,0.3); }
 
-        /* 詳細閲覧用モーダルのスタイル */
         #view-box { max-width: 380px; }
         .view-tag {
             display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px;
@@ -126,12 +133,10 @@
             width: 100%; max-height: 240px; object-fit: contain; border-radius: 10px;
             border: 1px solid #d2d2d7; box-shadow: 0 4px 12px rgba(0,0,0,0.08); background: #000; margin-bottom: 10px;
         }
-        /* 🕒 日時表示用のスタイル */
         .view-timestamp {
             font-size: 11px; color: #86868b; line-height: 1.4; margin-bottom: 15px; padding-left: 4px;
         }
         
-        /* 🗺️ 操作ヘルプ */
         .zoom-help {
             position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.6);
             color: white; padding: 4px 10px; border-radius: 20px; font-size: 11px; pointer-events: none; z-index: 50;
@@ -166,10 +171,10 @@
         
         <div class="config-panel" id="config-panel-area">
             <h3>🎨 ピンの色と名前の設定</h3>
-            <div class="label-group"><div class="color-dot" style="background:#ff3b30;"></div><input type="text" id="label-red" class="label-input" value="要補修"></div>
-            <div class="label-group"><div class="color-dot" style="background:#007aff;"></div><input type="text" id="label-blue" class="label-input" value="確認済み"></div>
-            <div class="label-group"><div class="color-dot" style="background:#ffcc00;"></div><input type="text" id="label-yellow" class="label-input" value="保留"></div>
-            <div class="label-group"><div class="color-dot" style="background:#34c759;"></div><input type="text" id="label-green" class="label-input" value="その他"></div>
+            <div class="label-group"><div class="color-dot" style="background:#ff3b30;"></div><input type="text" id="label-red" class="label-input" value="要対応"></div>
+            <div class="label-group"><div class="color-dot" style="background:#007aff;"></div><input type="text" id="label-blue" class="label-input" value="建物"></div>
+            <div class="label-group"><div class="color-dot" style="background:#ffcc00;"></div><input type="text" id="label-yellow" class="label-input" value="進行中"></div>
+            <div class="label-group"><div class="color-dot" style="background:#34c759;"></div><input type="text" id="label-green" class="label-input" value="植物"></div>
         </div>
     </div>
 </div>
@@ -204,7 +209,7 @@
 </div>
 
 <div id="view-box" class="modal">
-    <div id="view-tag-el" class="view-tag">要補修</div>
+    <div id="view-tag-el" class="view-tag">要対応</div>
     <div id="view-note-el" class="view-note">メモ内容</div>
     <img id="view-photo-el" class="view-photo" src="" alt="添付写真" style="display:none;">
     
@@ -282,19 +287,40 @@
         resultBox.style.display = 'block';
     });
 
-    // 🔍 ズーム機能の初期化設定
+    // 🔍 修正：初期表示で綺麗に中央収まるように設定を変更
     const panzoom = Panzoom(container, {
-        maxScale: 6, // 最大6倍まで拡大可能
+        maxScale: 8, // 細かく打てるように最大8倍まで拡張
         minScale: 1,
         contain: 'outside',
         startScale: 1
     });
 
-    // マウスホイールでのズームを有効化
     wrapper.addEventListener('wheel', (e) => {
-        if (e.ctrlKey) return; // ブラウザ全体のズームは無視
+        if (e.ctrlKey) return;
         panzoom.zoomWithWheel(e);
     });
+
+    // 🔍 修正：画像が読み込み完了した瞬間に位置を中央にカチッと整える処理
+    function initMapPosition() {
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const imgWidth = blueprint.offsetWidth;
+        const imgHeight = blueprint.offsetHeight;
+        
+        // コンテナのサイズを画像にジャストフィットさせる
+        container.style.width = imgWidth + 'px';
+        container.style.height = imgHeight + 'px';
+
+        // 中央に配置するための初期ズレ（X, Y）を計算してジャンプ
+        const initialX = (wrapperRect.width - imgWidth) / 2;
+        const initialY = (wrapperRect.height - imgHeight) / 2;
+        panzoom.pan(initialX, initialY);
+    }
+
+    if (blueprint.complete) {
+        initMapPosition();
+    } else {
+        blueprint.addEventListener('load', initMapPosition);
+    }
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -307,13 +333,12 @@
     let editingPinId = null;
 
     let colorLabelMap = {
-        "#ff3b30": "要補修",
-        "#007aff": "確認済み",
-        "#ffcc00": "保留",
-        "#34c759": "その他"
+        "#ff3b30": "要対応",
+        "#007aff": "建物",
+        "#ffcc00": "進行中",
+        "#34c759": "植物"
     };
 
-    // 日時を「YYYY/MM/DD HH:MM」に整形する関数
     function formatDate(timestamp) {
         if (!timestamp) return "";
         const date = new Date(timestamp);
@@ -395,22 +420,36 @@
         });
     }
 
-    // 🔍 修正：ドラッグ移動とクリック（ピン打ち）を判別する処理
-    let isDragging = false;
-    wrapper.addEventListener('panzoomstart', () => { isDragging = false; });
-    wrapper.addEventListener('panzoomchange', () => { isDragging = true; });
+    // 🔍 修正：指を離した瞬間の誤作動をブロックする超厳密な距離判定
+    let startX = 0; let startY = 0;
+    let hasMoved = false;
+
+    wrapper.addEventListener('pointerdown', (e) => {
+        startX = e.clientX;
+        startY = e.clientY;
+        hasMoved = false;
+    });
+
+    wrapper.addEventListener('pointermove', (e) => {
+        // 初期位置から数ピクセルでも動いたら「移動（ドラッグやズーム）した」とみなす
+        if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
+            hasMoved = true;
+        }
+    });
 
     container.addEventListener('click', (e) => {
         if (isViewOnly) return;
-        if (isDragging) return; // ドラッグ移動中のクリックならピンを打たない
+        if (hasMoved) {
+            // 🔍 修正：画面をズーム・移動させた直後の場合は処理を完全にスルーする
+            hasMoved = false;
+            return;
+        }
 
         if (e.target === blueprint || e.target === container) {
-            // 🔍 ズーム倍率を計算に入れて、正しい画像上の座標を取得する
             const rect = blueprint.getBoundingClientRect();
-            const currentScale = panzoom.getScale();
             
-            tempX = ((e.clientX - rect.left) / (rect.width)) * 100;
-            tempY = ((e.clientY - rect.top) / (rect.height)) * 100;
+            tempX = ((e.clientX - rect.left) / rect.width) * 100;
+            tempY = ((e.clientY - rect.top) / rect.height) * 100;
 
             editingPinId = null;
             modalTitle.textContent = "📌 情報をクラウドに記録";
@@ -479,7 +518,7 @@
 
                 pin.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (isDragging) return; // ドラッグ終了時の誤タップ防止
+                    if (hasMoved) return; // 🔍 ピンの真上でドラッグを終えた時の誤作動防止
                     
                     const pColor = data.color || '#ff3b30';
                     viewTagEl.textContent = colorLabelMap[pColor] || "未設定";
@@ -494,7 +533,6 @@
                         viewPhotoEl.style.display = "none";
                     }
 
-                    // 🕒 日時テキストを作成して表示
                     let timeHtml = `⏱ 登録: ${formatDate(data.createdAt || data.updatedAt)}`;
                     if (data.createdAt && data.updatedAt && data.updatedAt !== data.createdAt) {
                         timeHtml += `<br>🔄 更新: ${formatDate(data.updatedAt)}`;
