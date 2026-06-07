@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>見取り図ピン留めアプリ</title>
     <style>
         body {
@@ -50,7 +50,7 @@
             display: flex; flex-direction: column; gap: 12px;
         }
         
-        /* 🗺️ 見取り図外枠ウィンドウ（全体がきれいに入るように調整） */
+        /* 🗺️ 見取り図外枠ウィンドウ */
         #map-wrapper {
             width: 100%; height: 75vh; min-height: 500px; background-color: #f5f5f7;
             border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.08);
@@ -63,15 +63,17 @@
             position: absolute; display: inline-block;
             user-select: none; -webkit-user-select: none;
             transform-origin: 0 0;
+            width: 100%; /* 初期はコンテナ幅いっぱいに設定 */
         }
-        /* 見取り図画像が上下で削られないように max-height 制限を解除し全体を保持 */
+        
+        /* 見取り図画像はコンテナ（枠幅）に合わせて初期100%で綺麗に収まるように設定 */
         #blueprint { 
             display: block; 
-            width: auto; 
+            width: 100%;
             height: auto; 
         }
         
-        /* 📌 ピンの基本スタイル（スマホ版基準：4pxの極小サイズ） */
+        /* 📌 ピンの基本スタイル（スマホ用：4px極小） */
         .pin {
             position: absolute; 
             width: 4px;        
@@ -86,7 +88,7 @@
             touch-action: none; 
         }
         
-        /* 💻 パソコン（PC）環境のみ、ピンのサイズを3ポイント大きい「7px」に上書き */
+        /* 💻 パソコン（PC）環境のみ、ピンのサイズを3ポイント大きい「7px」にする */
         @media (min-width: 768px) {
             .pin {
                 width: 7px;
@@ -95,16 +97,14 @@
             }
         }
 
-        /* タップ・クリック判定用のシークレット領域（操作性を損なわないための広めの判定） */
+        /* 操作判定シークレット領域（タップしやすく） */
         .pin::after {
             content: '';
             position: absolute;
             top: -16px; left: -16px; right: -16px; bottom: -16px;
             border-radius: 50%;
         }
-        .pin:hover {
-            transform: translate(-50%, -50%) scale(1.5);
-        }
+        .pin:hover { transform: translate(-50%, -50%) scale(1.5); }
         .pin.dragging {
             transform: translate(-50%, -50%) scale(2.0);
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
@@ -194,7 +194,7 @@
     <div class="app-layout">
         <div class="main-area">
             <div id="map-wrapper">
-                <div class="zoom-help">📱 指2本で拡大・移動 / 💻 ホイールで拡大・ドラッグ移動 (ピンの長押しドラッグで位置調整)</div>
+                <div class="zoom-help">📱 指2本で拡大(2~3回で最大ズーム)・移動 / 💻 ホイールでズーム・ドラッグ移動</div>
                 <div id="map-container">
                     <img id="blueprint" src="map.jpg" alt="見取り図">
                 </div>
@@ -313,47 +313,71 @@
         resultBox.style.display = 'block';
     });
 
-    // 📱 指の数をトラッキングするための変数
     let activeTouches = 0;
+    let startTouchDist = 0;
+    let startScale = 1;
 
-    // Panzoom設定（PC・スマホそれぞれ完全最適化）
+    // Panzoom初期化 (minScaleを小さくして縮小を自由化、ドラッグ可動域を拡大)
     const panzoom = Panzoom(container, {
         maxScale: 8, 
-        minScale: 1,
-        contain: 'outside',
-        startScale: 1,
-        step: 0.2,            // 💻 PCでのホイールズーム速度を半分（0.2）にしてマイルドに
-        touchSpeed: 2.5,      // 📱 スマホ専用のピンチズーム感度を限界突破（2.5倍）に設定
+        minScale: 0.1,         // PCでの縮小制限を大幅に緩和
+        contain: false,        // 画面外までの自由なスクロール・移動を許可
+        step: 0.3,             // PCホイールのズーム幅
         animate: false,     
         handleStartEvent: (e) => {
-            if (e.target.classList.contains('pin') || isDraggingPin || activeTouches >= 2) return false;
+            if (e.target.classList.contains('pin') || isDraggingPin) return false;
         }
     });
 
-    // スマホでのタッチ数カウント処理（2本指操作時の誤作動防止用）
+    // 📱 【超進化】スマホ専用の「ピンチ幅ブースト倍率」ロジックの組み込み
     wrapper.addEventListener('touchstart', (e) => {
         activeTouches = e.touches.length;
-    }, { passive: true });
-
-    wrapper.addEventListener('touchend', (e) => {
-        activeTouches = e.touches.length;
+        if (e.touches.length === 2) {
+            // ピンチ開始時の2本指の距離を計算
+            startTouchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            startScale = panzoom.getScale();
+        }
     }, { passive: true });
 
     wrapper.addEventListener('touchmove', (e) => {
         activeTouches = e.touches.length;
-        if (e.touches.length === 2 && !isDraggingPin) {
-            panzoom.setOptions({ animate: true, duration: 60 }); 
+        if (e.touches.length === 2 && startTouchDist > 0 && !isDraggingPin) {
+            // 現在の指の距離を計算
+            const currentDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            
+            // 変化比率を計算
+            const ratio = currentDist / startTouchDist;
+            
+            // 🚀 ここでズームの動きの幅を「3倍」にブースト！ 2~3回で最大までいく調整
+            let targetScale = startScale + (ratio - 1) * 3.2;
+            
+            if (targetScale < 1) targetScale = 1;
+            if (targetScale > 8) targetScale = 8;
+            
+            panzoom.zoom(targetScale, { animate: false });
+        }
+    }, { passive: true });
+
+    wrapper.addEventListener('touchend', (e) => {
+        activeTouches = e.touches.length;
+        if (e.touches.length < 2) {
+            startTouchDist = 0;
         }
     }, { passive: true });
 
     wrapper.addEventListener('wheel', (e) => {
         if (e.ctrlKey) return;
-        panzoom.setOptions({ animate: true, duration: 120 });
         panzoom.zoomWithWheel(e);
     });
 
+    // 💻 PC初期配置：コンテナ幅いっぱいにフィットさせて真ん中に表示
     function initMapPosition() {
-        panzoom.setOptions({ animate: false });
         const wrapperRect = wrapper.getBoundingClientRect();
         const imgWidth = blueprint.offsetWidth;
         const imgHeight = blueprint.offsetHeight;
@@ -361,6 +385,7 @@
         container.style.width = imgWidth + 'px';
         container.style.height = imgHeight + 'px';
 
+        // 初期状態で全体が見える中央位置に配置
         const initialX = (wrapperRect.width - imgWidth) / 2;
         const initialY = (wrapperRect.height - imgHeight) / 2;
         
